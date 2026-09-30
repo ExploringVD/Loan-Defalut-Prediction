@@ -1,0 +1,66 @@
+{
+  "raw_train_shape": [
+    27003,
+    47
+  ],
+  "raw_test_shape": [
+    11574,
+    46
+  ],
+  "clean_train_shape": [
+    27003,
+    31
+  ],
+  "clean_test_shape": [
+    11574,
+    30
+  ],
+  "default_rate": 0.1473,
+  "issue_date_range": [
+    "2007-06-01",
+    "2011-12-01"
+  ],
+  "dropped_leakage_columns": [
+    "funded_amnt",
+    "funded_amnt_inv",
+    "out_prncp",
+    "out_prncp_inv",
+    "total_pymnt",
+    "total_pymnt_inv",
+    "total_rec_prncp",
+    "total_rec_int",
+    "total_rec_late_fee",
+    "recoveries",
+    "collection_recovery_fee",
+    "last_pymnt_d",
+    "last_pymnt_amnt",
+    "last_credit_pull_d"
+  ],
+  "dropped_id_text_columns": [
+    "member_id",
+    "url",
+    "desc",
+    "title",
+    "emp_title",
+    "zip_code"
+  ],
+  "dropped_sparse_columns": [
+    "mths_since_last_record"
+  ],
+  "new_columns": [
+    "term_months",
+    "issue_date",
+    "credit_history_months",
+    "sub_grade_num",
+    "ever_delinquent",
+    "loan_to_income",
+    "installment_to_income",
+    "revol_bal_to_income"
+  ],
+  "missing_share_after_cleaning": {
+    "emp_length": 0.027,
+    "mths_since_last_delinq": 0.6442,
+    "revol_util": 0.0013,
+    "pub_rec_bankruptcies": 0.0186
+  }
+}
