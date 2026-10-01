@@ -22,6 +22,7 @@ Leakage check numbers: `reports/leakage_check.md` (`python src/leakage_check.py`
 | 13 | Defaulters: median loan/income 0.24 vs 0.13, interest 13.5% vs 10.6%, income $41,655 vs $60,000 | 09 | Clear but overlapping differences - a multi-feature model is needed |
 | 14 | Best single-feature AUC 0.725, far below the 0.90 leakage alarm; quick models: LR 0.878, GB 0.936 (validation) | 12 | No leakage found; realistic final AUC ~0.93-0.95 |
 | 15 | No date column | - | Drift monitoring uses a simulated "current batch" built from the test split (Step 9) |
+| 16 | Found in Step 3: on the training split every renter with a loan above 30% of income defaulted (1,650 of 1,650) | 14 | Not leakage, but a sign of rule-made labels; AUC here is likely higher than on real loans - report as a limitation |
 
 Missing values are **not** filled in cleaning. They are imputed inside the model pipeline using medians from the
 training split only, so validation/test data never influences the fill values.

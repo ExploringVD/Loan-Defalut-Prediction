@@ -1,0 +1,5 @@
+model,imbalance_handling,cv_auc_mean,cv_auc_std,train_auc,val_roc_auc,val_pr_auc,val_ks,val_precision,val_recall,val_f1,fit_seconds
+XGBoost,scale_pos_weight = negatives / positives,0.9416,0.0053,0.9954,0.9549,0.9119,0.7721,0.8478,0.8015,0.824,0.1468
+XGBoost + SMOTE,SMOTE oversampling (training rows only),0.943,0.0043,0.9913,0.9524,0.9115,0.7711,0.9626,0.7507,0.8436,0.3262
+Random Forest,"class_weight=""balanced_subsample""",0.93,0.006,1.0,0.9405,0.8959,0.748,0.9831,0.7121,0.826,2.3115
+Logistic Regression,"class_weight=""balanced""",0.8729,0.0046,0.8735,0.8791,0.7258,0.6015,0.5303,0.7912,0.635,0.0566

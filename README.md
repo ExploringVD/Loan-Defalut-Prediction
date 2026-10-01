@@ -68,13 +68,16 @@ src/
   clean_data.py     clean the raw data (duplicates, impossible rows, grade -> number, Y/N -> 1/0)
   load_data.py      load cleaned data + 70/15/15 train/val/test split
   features.py       preprocessing (imputation, log, scaling, one-hot) for "linear" and "tree" models
-  leakage_check.py  single-feature AUC + quick Logistic Regression / Gradient Boosting baselines
+  leakage_check.py  single-feature AUC + quick Logistic Regression / Gradient Boosting baselines + perfect-rule check
+  train.py          train + compare 4 models (CV + validation), log everything to MLflow
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights, executed)
 reports/
   eda_summary.md    key EDA findings table (for the project report)
   leakage_check.md  leakage check and baseline AUCs
-  figures/          all charts as PNG
+  model_comparison.csv / .md   Step 3 model comparison
+  figures/          all charts as PNG (01-12 EDA, 13-14 model comparison)
+mlflow.db, mlruns/  local MLflow tracking (made by src/train.py, not in git)
 tests/            pytest tests
 archive/          old Lending Club work (not in git)
 pytest.ini        pytest settings (only runs tests/)
@@ -117,6 +120,7 @@ source .venv/bin/activate
 python src/clean_data.py      # re-creates data/processed from data/raw (needs the Kaggle file)
 python src/load_data.py       # prints the train/val/test sizes and default rates
 python src/leakage_check.py   # single-feature AUC + quick baselines -> reports/leakage_check.md
+python src/train.py           # train + compare 4 models (~35 s) -> reports/model_comparison.*, MLflow
 pytest -q                     # run the tests
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda.ipynb   # re-run the EDA
 ```
@@ -138,13 +142,49 @@ training rows only.
 
 `get_feature_names(fitted)` gives readable names (e.g. `person_emp_length_missing`, `loan_intent_MEDICAL`) for SHAP.
 
+## Model comparison (src/train.py)
+
+Four pipelines (preprocessing + model), trained on the training split. 5-fold stratified CV ROC-AUC on the
+training split, then fit on the whole training split and scored on the validation split. The test split is not used.
+
+| Model | Imbalance handling | CV ROC-AUC | Val ROC-AUC | Val PR-AUC | Val KS | Recall @0.5 |
+|---|---|---|---|---|---|---|
+| **XGBoost** | scale_pos_weight | 0.942 +/- 0.005 | **0.955** | 0.912 | 0.772 | 0.802 |
+| XGBoost + SMOTE | SMOTE in an imblearn Pipeline | 0.943 +/- 0.004 | 0.952 | 0.912 | 0.771 | 0.751 |
+| Random Forest | class_weight="balanced_subsample" | 0.930 +/- 0.006 | 0.940 | 0.896 | 0.748 | 0.712 |
+| Logistic Regression | class_weight="balanced" | 0.873 +/- 0.005 | 0.879 | 0.726 | 0.601 | 0.791 |
+
+**XGBoost is the model to tune (Step 4):** best validation AUC; SMOTE adds no real gain (+0.001 CV, within noise);
+trees beat Logistic Regression by 0.076 because they learn step patterns (grade C->D, loan > 30% of income, renters).
+No model passes the 0.97 leakage alarm. Full table and reasons: `reports/model_comparison.md`.
+Charts: `reports/figures/13_roc_curves_validation.png`, `14_pr_curves_validation.png`.
+
+**Honest limitation:** on the training split, *every* renter whose loan is more than 30% of income defaulted
+(1,650 of 1,650). That is not leakage (both are known at application time), but such a clean rule is unusual
+for real loans, so AUCs on this dataset are probably higher than on real lending data.
+
+### MLflow (local, no server needed)
+
+`src/train.py` logs one parent run (`model_comparison`) with four child runs: parameters, CV and validation
+metrics, a validation plot (ROC, PR, confusion matrix) and the fitted pipeline (saved with `skops`, a safer
+format than pickle). To browse the runs:
+
+```bash
+source .venv/bin/activate
+mlflow ui --backend-store-uri sqlite:///mlflow.db     # takes ~20 s to start
+```
+
+Open http://127.0.0.1:5000, choose the experiment **loan-default**, expand **model_comparison** to see the four
+models, tick them and press **Compare**. Stop the UI with Ctrl+C.
+
 ## Results so far
 
 | | Validation ROC-AUC |
 |---|---|
 | Best single feature (loan_grade_num) | 0.725 |
-| Logistic Regression (untuned) | 0.878 |
-| Gradient Boosting (untuned) | 0.936 |
+| Logistic Regression (untuned, quick baseline) | 0.878 |
+| Gradient Boosting (untuned, quick baseline) | 0.936 |
+| **XGBoost (Step 3, untuned)** | **0.955** (CV 0.942) |
 
 No feature passes the 0.90 single-feature leakage alarm and no model passes 0.97 (`reports/leakage_check.md`).
 Key EDA findings: `reports/eda_summary.md`.
