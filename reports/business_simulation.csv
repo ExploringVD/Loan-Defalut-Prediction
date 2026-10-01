@@ -1,0 +1,4 @@
+policy,loans_approved,amount_approved,defaults_approved,default_amount_approved,npa_ratio,good_loans_approved,good_loans_lost,good_amount_lost,interest_income,default_loss,net_result,npa_reduction_count,npa_reduction_amount,good_loans_lost_share
+Baseline: approve everyone,4862,46491150.0,1063,11439550.0,0.2461,3799,0,0.0,3716379.2675,11439550.0,-7723170.7325,0.0,0.0,0.0
+Scenario A: REVIEW approved,4005,36906100.0,257,2308875.0,0.0626,3748,51,454375.0,3647865.58,2308875.0,1338990.58,0.7582,0.7982,0.0134
+Scenario B: REVIEW rejected,3020,28353375.0,89,794900.0,0.028,2931,868,7493125.0,2750223.1525,794900.0,1955323.1525,0.9163,0.9305,0.2285

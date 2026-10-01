@@ -92,7 +92,34 @@
     ]
   },
   "threshold": 0.5,
-  "decision_cutoffs": null,
+  "decision_cutoffs": {
+    "review": 0.1,
+    "reject": 0.35,
+    "bands": {
+      "APPROVE": "p < 0.1",
+      "REVIEW": "0.1 <= p < 0.35",
+      "REJECT": "p >= 0.35"
+    },
+    "rules": {
+      "max_good_rejected": 0.02,
+      "min_defaulters_flagged": 0.9
+    },
+    "chosen_on": "validation split, same pipeline refit on the training split only",
+    "validation_bands": {
+      "APPROVE": {
+        "share_of_loans": 0.6384,
+        "default_rate": 0.0287
+      },
+      "REVIEW": {
+        "share_of_loans": 0.1839,
+        "default_rate": 0.1935
+      },
+      "REJECT": {
+        "share_of_loans": 0.1777,
+        "default_rate": 0.9271
+      }
+    }
+  },
   "n_trials": 50,
   "n_complete": 47,
   "n_pruned": 3,

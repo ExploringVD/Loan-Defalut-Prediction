@@ -71,9 +71,10 @@ src/
   leakage_check.py  single-feature AUC + quick Logistic Regression / Gradient Boosting baselines + perfect-rule check
   train.py          train + compare 4 models (CV + validation), log everything to MLflow
   tune.py           Optuna tuning of XGBoost, calibration, ONE test evaluation, save + register the final model
+  business.py       APPROVE / REVIEW / REJECT cut-offs (validation) + NPA reduction simulation (test)
 models/
   loan_default_model.joblib   final pipeline (preprocessing + calibrated XGBoost) used by the API
-  model_meta.json             version, features, best params, test metrics, library versions
+  model_meta.json             version, features, best params, test metrics, decision cut-offs, library versions
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights, executed)
 reports/
@@ -81,7 +82,8 @@ reports/
   leakage_check.md  leakage check and baseline AUCs
   model_comparison.csv / .md   Step 3 model comparison
   final_model.md    Step 4 final model: best params, calibration, test metrics
-  figures/          all charts as PNG (01-12 EDA, 13-14 model comparison, 15-19 final model)
+  business_simulation.md / .csv   Step 5 decision bands and NPA reduction
+  figures/          all charts as PNG (01-12 EDA, 13-14 model comparison, 15-19 final model, 20-21 business)
 mlflow.db, mlruns/  local MLflow tracking (made by src/train.py, not in git)
 tests/            pytest tests
 archive/          old Lending Club work (not in git)
@@ -127,6 +129,7 @@ python src/load_data.py       # prints the train/val/test sizes and default rate
 python src/leakage_check.py   # single-feature AUC + quick baselines -> reports/leakage_check.md
 python src/train.py           # train + compare 4 models (~35 s) -> reports/model_comparison.*, MLflow
 python src/tune.py            # Optuna 50 trials + final model (~3 min) -> models/, reports/final_model.md
+python src/business.py        # decision cut-offs + NPA simulation (~10 s) -> reports/business_simulation.md
 pytest -q                     # run the tests
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda.ipynb   # re-run the EDA
 ```
@@ -214,6 +217,31 @@ model.predict_proba(X)[:, 1]                                  # probability of d
 # or from the MLflow registry:  mlflow.sklearn.load_model("models:/loan_default_model@production")
 ```
 
+## Decision bands and NPA reduction (src/business.py)
+
+**Cut-offs (chosen on the validation split** with the same pipeline refit on the training split only, so the
+scores are honest; saved in `models/model_meta.json`):
+
+| Band | Rule | Validation: loans | Validation: default rate |
+|---|---|---|---|
+| APPROVE | probability < 0.10 (REVIEW + REJECT still hold >= 90% of defaulters) | 63.8% | 2.9% |
+| REVIEW | 0.10 to 0.35 - a credit officer decides | 18.4% | 19.4% |
+| REJECT | probability >= 0.35 (turns away <= 2% of good borrowers) | 17.8% | 92.7% |
+
+**Simulation on the test split** (4,862 loans; baseline = approve everyone, which is what really happened):
+
+| | Approve everyone | A: REVIEW approved | B: REVIEW rejected |
+|---|---|---|---|
+| Defaulted loans approved | 1,063 | 257 | 89 |
+| Defaulted amount approved (NPA) | $11.44M | $2.31M | $0.79M |
+| **NPA reduction (amount)** | - | **79.8%** | **93.1%** |
+| Good borrowers turned away | 0 | 51 (1.3%) | 868 (22.8%) |
+| Net result (1 year interest - full loss on defaults) | -$7.72M | +$1.34M | +$1.96M |
+
+The 30% NPA-reduction target is met in both scenarios - but measured against "approve everyone", on a dataset
+with a perfect rule, with a simple money model. Read the caveats in `reports/business_simulation.md`.
+Charts: `reports/figures/20_decision_bands.png`, `21_npa_reduction.png`.
+
 ## Results so far
 
 | | Validation ROC-AUC |
@@ -224,6 +252,8 @@ model.predict_proba(X)[:, 1]                                  # probability of d
 | XGBoost (Step 3, untuned) | 0.955 (CV 0.942) |
 | XGBoost tuned (Step 4) | 0.957 (CV 0.946) |
 | **Final calibrated model - TEST split** | **0.952** |
+
+NPA reduction on the test split: **79.8%** (REVIEW approved) to **93.1%** (REVIEW rejected) vs approving everyone.
 
 No feature passes the 0.90 single-feature leakage alarm and no model passes 0.97 (`reports/leakage_check.md`).
 Key EDA findings: `reports/eda_summary.md`.
