@@ -26,8 +26,8 @@ docker-compose.yml  PostgreSQL 16 (service "db")
 ## Setup (once)
 
 ```bash
-git clone https://github.com/ExploringVD/Loan-Default-Prediction.git
-cd Loan-Default-Prediction
+git clone https://github.com/ExploringVD/Loan-Defalut-Prediction.git
+cd Loan-Defalut-Prediction
 uv venv --python 3.12
 source .venv/bin/activate
 uv pip install -r requirements.txt
