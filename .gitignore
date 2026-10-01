@@ -25,3 +25,7 @@ prompts/
 
 # CSV copies of processed data (the .parquet files are pushed)
 data/processed/*.csv
+
+# Raw data (download from Kaggle, see README) and the archived Lending Club work (kept on disk only)
+data/raw/
+archive/

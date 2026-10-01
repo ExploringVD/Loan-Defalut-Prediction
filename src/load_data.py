@@ -1,5 +1,5 @@
 """
-Load the cleaned data for model training.
+Load the cleaned Credit Risk data for model training.
 
 Usage in a notebook or training script:
     from load_data import get_splits, NUMERIC_FEATURES, CATEGORICAL_FEATURES
@@ -24,50 +24,35 @@ PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
 TARGET = "loan_status"
 RANDOM_STATE = 42
 
+# The grade is used as a number (loan_grade_num, A=1 ... G=7) and NOT also as the text column
+# loan_grade, so the same information is not encoded twice.
 NUMERIC_FEATURES = [
-    "loan_amnt", "term_months", "int_rate", "installment", "sub_grade_num",
-    "emp_length", "annual_inc", "dti",
-    "delinq_2yrs", "inq_last_6mths", "mths_since_last_delinq", "ever_delinquent",
-    "open_acc", "total_acc", "pub_rec", "pub_rec_bankruptcies",
-    "revol_bal", "revol_util", "credit_history_months",
-    "loan_to_income", "installment_to_income", "revol_bal_to_income",
+    "person_age", "person_income", "person_emp_length",
+    "loan_amnt", "loan_int_rate", "loan_percent_income", "loan_grade_num",
+    "cb_person_default_on_file", "cb_person_cred_hist_length",
 ]
-CATEGORICAL_FEATURES = [
-    "grade", "home_ownership", "verification_status", "purpose", "addr_state",
-]
+CATEGORICAL_FEATURES = ["person_home_ownership", "loan_intent"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
-def _read(name: str) -> pd.DataFrame:
-    parquet = PROCESSED_DIR / f"{name}.parquet"
-    if parquet.exists():
-        df = pd.read_parquet(parquet)
-    else:
-        df = pd.read_csv(PROCESSED_DIR / f"{name}.csv", parse_dates=["issue_date"])
+def load_clean() -> pd.DataFrame:
+    """Cleaned data made by src/clean_data.py: loan_id, features, loan_grade (text), loan_status."""
+    parquet = PROCESSED_DIR / "credit_clean.parquet"
+    df = pd.read_parquet(parquet) if parquet.exists() else pd.read_csv(PROCESSED_DIR / "credit_clean.csv")
     # Plain numpy types so every scikit-learn / XGBoost version accepts them
     df[NUMERIC_FEATURES] = df[NUMERIC_FEATURES].astype("float64")
     df[CATEGORICAL_FEATURES] = df[CATEGORICAL_FEATURES].astype(object)
     return df
 
 
-def load_clean_train() -> pd.DataFrame:
-    """Cleaned training file: id, features, issue_date, loan_status."""
-    return _read("train_clean")
-
-
-def load_clean_test() -> pd.DataFrame:
-    """Cleaned Kaggle test file (no loan_status). Only used for the Kaggle submission."""
-    return _read("test_clean")
-
-
 def get_splits(val_size: float = 0.15, test_size: float = 0.15) -> dict:
-    """70/15/15 split of the labelled data, stratified so each part keeps the same default rate.
+    """70/15/15 split, stratified so each part keeps the same default rate.
 
     - train: fit the model
     - val:   tune hyperparameters and the decision threshold
     - test:  touch once at the end to report the final AUC
     """
-    df = load_clean_train()
+    df = load_clean()
     X, y = df[FEATURES], df[TARGET]
 
     X_rest, X_test, y_rest, y_test = train_test_split(
@@ -80,16 +65,15 @@ def get_splits(val_size: float = 0.15, test_size: float = 0.15) -> dict:
         "X_train": X_train, "y_train": y_train,
         "X_val": X_val, "y_val": y_val,
         "X_test": X_test, "y_test": y_test,
-        # kept aside for drift monitoring demos (not a model feature)
-        "issue_date": df.loc[X.index, "issue_date"],
-        "ids": df.loc[X.index, "id"],
+        # loan_id for every row (same index as X), to trace predictions back to a loan
+        "ids": df["loan_id"],
     }
 
 
 if __name__ == "__main__":
     data = get_splits()
+    total = sum(len(data[f"X_{p}"]) for p in ["train", "val", "test"])
     for part in ["train", "val", "test"]:
         X, y = data[f"X_{part}"], data[f"y_{part}"]
-        print(f"{part:5s}: {len(X):6,d} rows | default rate {y.mean():.1%}")
+        print(f"{part:5s}: {len(X):6,d} rows ({len(X) / total:.0%}) | default rate {y.mean():.1%}")
     print(f"Features: {len(NUMERIC_FEATURES)} numeric + {len(CATEGORICAL_FEATURES)} categorical = {len(FEATURES)}")
-    print(f"Kaggle test file: {len(load_clean_test()):,} rows (no labels)")

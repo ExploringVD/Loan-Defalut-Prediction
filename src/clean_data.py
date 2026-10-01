@@ -1,10 +1,17 @@
 """
-Clean the raw Lending Club files and save them for training.
+Clean the raw Kaggle "Credit Risk Dataset" and save it for training.
 
-Input  (data/raw/):        loan_train.csv, loan_test.csv
-Output (data/processed/):  train_clean.parquet, test_clean.parquet
-                           train_clean.csv,     test_clean.csv   (for viewing in Excel/Numbers)
-                           cleaning_report.json                  (summary of what changed)
+Input  (data/raw/):        credit_risk_dataset.csv   (download: see README)
+Output (data/processed/):  credit_clean.parquet      (used by src/load_data.py)
+                           credit_clean.csv          (copy for viewing in Excel/Numbers, not pushed to git)
+                           cleaning_report.json      (summary of what changed)
+
+What cleaning does:
+    1. removes exact duplicate rows
+    2. adds a stable loan_id (= row number in the raw file, so every loan can be traced back)
+    3. removes impossible rows (age above 100, more years employed than possible for the age)
+    4. adds loan_grade_num (A=1 ... G=7) and turns cb_person_default_on_file Y/N into 1/0
+Missing values are NOT filled here: imputation happens inside the model pipeline, fitted on training data only.
 
 Run from the project folder:
     python src/clean_data.py
@@ -13,181 +20,149 @@ Run from the project folder:
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-RAW_DIR = PROJECT_DIR / "data" / "raw"
+RAW_FILE = PROJECT_DIR / "data" / "raw" / "credit_risk_dataset.csv"
 OUT_DIR = PROJECT_DIR / "data" / "processed"
 
 TARGET = "loan_status"  # 1 = defaulted, 0 = repaid
 
-# ---------------------------------------------------------------------------
-# Columns we remove, and why
-# ---------------------------------------------------------------------------
-
-# Known only AFTER the loan was given (payments, recoveries, last payment...).
-# Keeping them lets the model "see the future": AUC jumps to ~0.99, which is fake.
-LEAKAGE_COLS = [
-    "funded_amnt", "funded_amnt_inv",          # decided at approval, ~equal to loan_amnt
-    "out_prncp", "out_prncp_inv",
-    "total_pymnt", "total_pymnt_inv",
-    "total_rec_prncp", "total_rec_int", "total_rec_late_fee",
-    "recoveries", "collection_recovery_fee",
-    "last_pymnt_d", "last_pymnt_amnt", "last_credit_pull_d",
+RAW_COLUMNS = [
+    "person_age", "person_income", "person_home_ownership", "person_emp_length",
+    "loan_intent", "loan_grade", "loan_amnt", "loan_int_rate", TARGET,
+    "loan_percent_income", "cb_person_default_on_file", "cb_person_cred_hist_length",
 ]
 
-# IDs, links and free text: no predictive value or too many unique values.
-# `id` is kept separately so predictions can be matched back to a loan.
-ID_TEXT_COLS = ["member_id", "url", "desc", "title", "emp_title", "zip_code"]
+GRADE_MAP = {g: i for i, g in enumerate("ABCDEFG", start=1)}  # A=1 (safest) ... G=7 (riskiest)
+YES_NO_MAP = {"Y": 1, "N": 0}
 
-# More than 90% missing; the same information is already in `pub_rec`.
-SPARSE_COLS = ["mths_since_last_record"]
+MAX_AGE = 100           # nobody older than this takes a loan; the raw data has ages of 123 and 144
+MIN_WORKING_AGE = 14    # employment length cannot be longer than (age - 14) years
 
-EMP_LENGTH_MAP = {
-    "< 1 year": 0, "1 year": 1, "2 years": 2, "3 years": 3, "4 years": 4,
-    "5 years": 5, "6 years": 6, "7 years": 7, "8 years": 8, "9 years": 9,
-    "10+ years": 10,
-}
-GRADES = "ABCDEFG"
+# Allowed categories (raw data checked) - anything else means the file changed
+HOME_OWNERSHIP = {"RENT", "MORTGAGE", "OWN", "OTHER"}
+LOAN_INTENT = {"EDUCATION", "MEDICAL", "VENTURE", "PERSONAL", "DEBTCONSOLIDATION", "HOMEIMPROVEMENT"}
 
 
-def _to_str(s: pd.Series) -> pd.Series:
-    """String version of a column with surrounding spaces removed (works on pandas 2 and 3)."""
-    return s.astype("string").str.strip()
+def clean(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Return the cleaned data and a dict with the number of rows removed per reason."""
+    df = raw.copy()
+    removed = {}
 
+    # 1. Stable id = row number in the raw file (1-based), set before anything is removed
+    df.insert(0, "loan_id", range(1, len(df) + 1))
 
-def _percent_to_float(s: pd.Series) -> pd.Series:
-    """'13.23%' -> 13.23"""
-    return pd.to_numeric(_to_str(s).str.rstrip("%"), errors="coerce")
+    # 2. Exact duplicates (all 12 raw columns equal): keep the first copy.
+    #    Duplicates could end up in both train and test and make the test score look better than it is.
+    dup = df.duplicated(subset=RAW_COLUMNS, keep="first")
+    removed["exact_duplicates"] = int(dup.sum())
+    df = df[~dup]
 
+    # 3. Impossible values (data entry errors)
+    too_old = df["person_age"] > MAX_AGE
+    emp_too_long = df["person_emp_length"] > df["person_age"] - MIN_WORKING_AGE  # NaN compares as False -> kept
+    removed["age_above_100"] = int(too_old.sum())
+    removed["emp_length_above_age_minus_14"] = int((emp_too_long & ~too_old).sum())
+    df = df[~(too_old | emp_too_long)]
 
-def _month_year_to_date(s: pd.Series) -> pd.Series:
-    """'Sep-02' -> 2002-09-01, '(Mar-68)' -> 1968-03-01.
+    # 4. Tidy text and add model-friendly versions
+    for c in ["person_home_ownership", "loan_intent", "loan_grade", "cb_person_default_on_file"]:
+        df[c] = df[c].astype("string").str.strip().str.upper()
+    df["loan_grade_num"] = df["loan_grade"].map(GRADE_MAP).astype("Int64")
+    df["cb_person_default_on_file"] = df["cb_person_default_on_file"].map(YES_NO_MAP).astype("Int64")
 
-    Two-digit years are ambiguous: pandas reads '68' as 2068. Nothing in this
-    dataset is after 2011, so any year after 2011 is moved back 100 years.
-    """
-    d = pd.to_datetime(_to_str(s), format="%b-%y", errors="coerce")
-    future = d.dt.year > 2011
-    d = d.where(~future, d - pd.DateOffset(years=100))
-    return d
-
-
-def clean(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply the same cleaning to train and test."""
-    df = df.copy()
-
-    # 1. Remove leakage, ID/text and very sparse columns
-    df = df.drop(columns=[c for c in LEAKAGE_COLS + ID_TEXT_COLS + SPARSE_COLS if c in df.columns])
-
-    # 2. Text -> numbers
-    df["term_months"] = pd.to_numeric(_to_str(df.pop("term")).str.extract(r"(\d+)")[0], errors="coerce").astype("Int64")
-    df["int_rate"] = _percent_to_float(df["int_rate"])
-    df["revol_util"] = _percent_to_float(df["revol_util"])
-    df["emp_length"] = _to_str(df["emp_length"]).map(EMP_LENGTH_MAP).astype("Float64")
-
-    # 3. Dates -> credit history length (months), keep issue date for time-based checks and drift
-    df["issue_date"] = _month_year_to_date(df.pop("issue_d"))
-    earliest = _month_year_to_date(df.pop("earliest_cr_line"))
-    df["credit_history_months"] = (
-        (df["issue_date"].dt.year - earliest.dt.year) * 12
-        + (df["issue_date"].dt.month - earliest.dt.month)
-    ).astype("Int64")
-
-    # 4. Tidy categories
-    for c in ["grade", "sub_grade", "home_ownership", "verification_status", "purpose", "addr_state"]:
-        df[c] = _to_str(df[c])
-    df["home_ownership"] = df["home_ownership"].replace({"NONE": "OTHER"})  # only 3 rows had NONE
-    # A1 -> 1, A2 -> 2, ... G5 -> 35 (keeps the order of risk grades)
-    df["sub_grade_num"] = (
-        df["sub_grade"].str[0].map({g: i for i, g in enumerate(GRADES)}) * 5
-        + pd.to_numeric(df["sub_grade"].str[1], errors="coerce")
-    ).astype("Int64")
-
-    # 5. Missing value flags (actual filling happens inside the model pipeline, fitted on train only)
-    df["ever_delinquent"] = df["mths_since_last_delinq"].notna().astype("int8")
-
-    # 6. Simple, easy-to-explain ratio features
-    inc = df["annual_inc"].replace(0, np.nan)
-    df["loan_to_income"] = df["loan_amnt"] / inc
-    df["installment_to_income"] = (df["installment"] * 12) / inc
-    df["revol_bal_to_income"] = df["revol_bal"] / inc
-
-    # 7. Plain column order: id, features, then target / date at the end
-    front = ["id"]
-    back = [c for c in ["issue_date", TARGET] if c in df.columns]
+    # 5. Column order: id, raw features, new feature, target last
+    front = ["loan_id"]
+    back = [TARGET]
     middle = [c for c in df.columns if c not in front + back]
-    return df[front + middle + back]
+    return df[front + middle + back].reset_index(drop=True), removed
 
 
-def validate(train: pd.DataFrame, test: pd.DataFrame) -> list[str]:
+def validate(df: pd.DataFrame) -> list[str]:
     """Checks that fail loudly if something is wrong with the cleaned data."""
     problems = []
-    if train["id"].duplicated().any():
-        problems.append("duplicate ids in train")
-    if not set(train[TARGET].unique()) <= {0, 1}:
+    if not set(df[TARGET].unique()) <= {0, 1}:
         problems.append("target has values other than 0/1")
-    leftover = [c for c in LEAKAGE_COLS if c in train.columns]
-    if leftover:
-        problems.append(f"leakage columns still present: {leftover}")
-    if set(train.columns) - {TARGET} != set(test.columns):
-        problems.append("train and test columns do not match")
-    for name, (lo, hi) in {"int_rate": (0, 40), "dti": (0, 100), "revol_util": (0, 150)}.items():
-        v = train[name].dropna()
+    if df["loan_id"].duplicated().any():
+        problems.append("duplicate loan_id")
+    if df.duplicated(subset=RAW_COLUMNS).any():
+        problems.append("duplicate rows left")
+    if df["loan_grade_num"].isna().any():
+        problems.append("unknown loan_grade (not A-G)")
+    if df["cb_person_default_on_file"].isna().any():
+        problems.append("cb_person_default_on_file is not Y/N")
+    if not set(df["person_home_ownership"].dropna()) <= HOME_OWNERSHIP:
+        problems.append("unexpected person_home_ownership value")
+    if not set(df["loan_intent"].dropna()) <= LOAN_INTENT:
+        problems.append("unexpected loan_intent value")
+
+    # Sane ranges (NaN is allowed in columns that are imputed later)
+    ranges = {
+        "person_age": (18, MAX_AGE),
+        "person_income": (1, 10_000_000),
+        "person_emp_length": (0, MAX_AGE - MIN_WORKING_AGE),
+        "loan_amnt": (1, 100_000),
+        "loan_int_rate": (1, 40),
+        "loan_percent_income": (0, 1),
+        "cb_person_cred_hist_length": (0, MAX_AGE),
+    }
+    for name, (lo, hi) in ranges.items():
+        v = df[name].dropna()
         if len(v) and (v.min() < lo or v.max() > hi):
-            problems.append(f"{name} outside expected range {lo}-{hi}")
-    if train["credit_history_months"].dropna().lt(0).any():
-        problems.append("negative credit history length (date parsing issue)")
+            problems.append(f"{name} outside expected range {lo}-{hi} (found {v.min()}-{v.max()})")
+    if (df["person_emp_length"] > df["person_age"] - MIN_WORKING_AGE).any():
+        problems.append("person_emp_length longer than possible for the age")
+
+    # Only these two columns may have missing values (they are imputed in the pipeline)
+    unexpected_missing = [c for c in df.columns[df.isna().any()] if c not in ("loan_int_rate", "person_emp_length")]
+    if unexpected_missing:
+        problems.append(f"unexpected missing values in {unexpected_missing}")
     return problems
 
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    raw_train = pd.read_csv(RAW_DIR / "loan_train.csv")
-    raw_test = pd.read_csv(RAW_DIR / "loan_test.csv")
+    raw = pd.read_csv(RAW_FILE)
+    missing_cols = set(RAW_COLUMNS) - set(raw.columns)
+    if missing_cols:
+        raise SystemExit(f"{RAW_FILE.name} is missing columns: {sorted(missing_cols)}")
 
-    train = clean(raw_train)
-    test = clean(raw_test)
-
-    problems = validate(train, test)
+    df, removed = clean(raw)
+    problems = validate(df)
     if problems:
         raise SystemExit("Cleaning checks failed:\n - " + "\n - ".join(problems))
 
-    # Save: Parquet keeps data types (dates, integers); CSV is for looking at the data
-    for name, df in [("train_clean", train), ("test_clean", test)]:
-        try:
-            df.to_parquet(OUT_DIR / f"{name}.parquet", index=False)
-        except ImportError:
-            print("pyarrow not installed, skipping Parquet (pip install pyarrow)")
-        df.to_csv(OUT_DIR / f"{name}.csv", index=False)
+    # Parquet keeps data types; CSV is only for looking at the data
+    df.to_parquet(OUT_DIR / "credit_clean.parquet", index=False)
+    df.to_csv(OUT_DIR / "credit_clean.csv", index=False)
 
-    missing = train.isna().mean().round(4)
+    missing = df.isna().mean()
     report = {
-        "raw_train_shape": list(raw_train.shape),
-        "raw_test_shape": list(raw_test.shape),
-        "clean_train_shape": list(train.shape),
-        "clean_test_shape": list(test.shape),
-        "default_rate": round(float(train[TARGET].mean()), 4),
-        "issue_date_range": [str(train["issue_date"].min().date()), str(train["issue_date"].max().date())],
-        "dropped_leakage_columns": LEAKAGE_COLS,
-        "dropped_id_text_columns": ID_TEXT_COLS,
-        "dropped_sparse_columns": SPARSE_COLS,
-        "new_columns": ["term_months", "issue_date", "credit_history_months", "sub_grade_num",
-                        "ever_delinquent", "loan_to_income", "installment_to_income", "revol_bal_to_income"],
-        "missing_share_after_cleaning": {k: float(v) for k, v in missing[missing > 0].items()},
+        "raw_file": RAW_FILE.name,
+        "raw_shape": list(raw.shape),
+        "clean_shape": list(df.shape),
+        "rows_removed": removed,
+        "rows_removed_total": sum(removed.values()),
+        "default_rate_raw": round(float(raw[TARGET].mean()), 4),
+        "default_rate_clean": round(float(df[TARGET].mean()), 4),
+        "new_columns": ["loan_id", "loan_grade_num"],
+        "converted_columns": {"cb_person_default_on_file": "Y/N -> 1/0"},
+        "missing_share_after_cleaning": {k: round(float(v), 4) for k, v in missing[missing > 0].items()},
+        "note": "Missing values are imputed inside the model pipeline (fitted on the training split only).",
     }
     (OUT_DIR / "cleaning_report.json").write_text(json.dumps(report, indent=2))
 
-    print(f"Train: {raw_train.shape} -> {train.shape}")
-    print(f"Test:  {raw_test.shape} -> {test.shape}")
-    print(f"Default rate: {report['default_rate']:.1%}")
-    print(f"Loans issued: {report['issue_date_range'][0]} to {report['issue_date_range'][1]}")
+    print(f"Raw:   {raw.shape[0]:,} rows x {raw.shape[1]} columns")
+    for reason, n in removed.items():
+        print(f"  removed {n:4d}  {reason}")
+    print(f"Clean: {df.shape[0]:,} rows x {df.shape[1]} columns")
+    print(f"Default rate: {report['default_rate_clean']:.1%}")
     print("Missing values left (filled later inside the model pipeline):")
-    for k, v in report["missing_share_after_cleaning"].items():
-        print(f"  {k:24s} {v:.1%}")
-    print(f"Saved to {OUT_DIR}")
+    for k, v in missing[missing > 0].items():
+        print(f"  {k:22s} {v:.1%}  ({df[k].isna().sum():,} rows)")
+    print(f"Saved to {OUT_DIR.relative_to(PROJECT_DIR)}/credit_clean.parquet (+ .csv, cleaning_report.json)")
 
 
 if __name__ == "__main__":

@@ -33,16 +33,16 @@ def test_no_nans_and_same_columns_for_all_splits(kind, data):
 def test_unseen_and_missing_categories_do_not_crash(kind, data):
     pre = build_preprocessor(kind).fit(data["X_train"])
     X_new = data["X_val"].head(3).copy()
-    X_new["addr_state"] = "ZZ"                # state never seen in training
-    X_new["purpose"] = "space_travel"         # purpose never seen in training
-    X_new.loc[X_new.index[0], "home_ownership"] = None
+    X_new["loan_intent"] = "SPACE_TRAVEL"                 # intent never seen in training
+    X_new["person_home_ownership"] = "BOAT"               # home ownership never seen in training
+    X_new.loc[X_new.index[0], "person_home_ownership"] = None
     out = pre.transform(X_new)
     assert out.shape == (3, len(get_feature_names(pre)))
     assert not np.isnan(out).any()
     # unknown category -> all its one-hot columns are 0
     names = get_feature_names(pre)
-    state_cols = [i for i, n in enumerate(names) if n.startswith("addr_state_")]
-    assert (out[:, state_cols] == 0).all()
+    intent_cols = [i for i, n in enumerate(names) if n.startswith("loan_intent_")]
+    assert (out[:, intent_cols] == 0).all()
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -74,7 +74,7 @@ def test_fit_uses_only_given_data(data):
 def test_tree_imputer_median_from_train(data):
     pre = build_preprocessor("tree").fit(data["X_train"])
     flagged = pre.named_transformers_["flagged"]
-    assert flagged.statistics_[0] == data["X_train"]["mths_since_last_delinq"].median()
+    assert flagged.statistics_[0] == data["X_train"]["loan_int_rate"].median()
 
 
 def test_feature_names_are_readable(data):
@@ -83,24 +83,34 @@ def test_feature_names_are_readable(data):
     assert len(names) == lin.transform(data["X_val"].head(2)).shape[1]
     assert len(set(names)) == len(names)
     assert not any("__" in n or "missingindicator" in n or "infrequent_sklearn" in n for n in names)
-    assert "emp_length_missing" in names
-    assert "addr_state_other" in names
+    assert "person_emp_length_missing" in names
+    assert "loan_intent_MEDICAL" in names
     for dropped in LINEAR_DROP_FEATURES:
         assert dropped not in names
+    assert "loan_grade_num" in names and "person_age" in names      # kept side of each correlated pair
 
     tree = build_preprocessor("tree").fit(data["X_train"])
     tree_names = get_feature_names(tree)
-    assert "sub_grade_num" in tree_names
-    assert "mths_since_last_delinq_missing" in tree_names
-    assert "emp_length_missing" not in tree_names
+    assert "loan_int_rate" in tree_names and "cb_person_cred_hist_length" in tree_names
+    assert "loan_int_rate_missing" in tree_names
+    assert "person_emp_length_missing" not in tree_names
+
+
+def test_rare_categories_grouped_as_other(data):
+    """OTHER home ownership is rare: in 2,000 training rows it appears fewer than 20 times -> "_other"."""
+    X_small = data["X_train"].head(2000)
+    assert (X_small["person_home_ownership"] == "OTHER").sum() < 20
+    names = get_feature_names(build_preprocessor("linear").fit(X_small))
+    assert "person_home_ownership_other" in names
+    assert "person_home_ownership_OTHER" not in names
 
 
 def test_drop_list_is_configurable(data):
-    pre = build_preprocessor("linear", drop_features=["dti", "addr_state"]).fit(data["X_train"])
+    pre = build_preprocessor("linear", drop_features=["person_income", "loan_intent"]).fit(data["X_train"])
     names = get_feature_names(pre)
-    assert "dti" not in names
-    assert not any(n.startswith("addr_state_") for n in names)
-    assert "sub_grade_num" in names      # default drop list replaced, not added to
+    assert "person_income" not in names
+    assert not any(n.startswith("loan_intent_") for n in names)
+    assert "loan_int_rate" in names      # default drop list replaced, not added to
 
 
 def test_get_feature_names_accepts_pipeline(data):

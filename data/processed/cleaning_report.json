@@ -1,66 +1,31 @@
 {
-  "raw_train_shape": [
-    27003,
-    47
+  "raw_file": "credit_risk_dataset.csv",
+  "raw_shape": [
+    32581,
+    12
   ],
-  "raw_test_shape": [
-    11574,
-    46
+  "clean_shape": [
+    32409,
+    14
   ],
-  "clean_train_shape": [
-    27003,
-    31
-  ],
-  "clean_test_shape": [
-    11574,
-    30
-  ],
-  "default_rate": 0.1473,
-  "issue_date_range": [
-    "2007-06-01",
-    "2011-12-01"
-  ],
-  "dropped_leakage_columns": [
-    "funded_amnt",
-    "funded_amnt_inv",
-    "out_prncp",
-    "out_prncp_inv",
-    "total_pymnt",
-    "total_pymnt_inv",
-    "total_rec_prncp",
-    "total_rec_int",
-    "total_rec_late_fee",
-    "recoveries",
-    "collection_recovery_fee",
-    "last_pymnt_d",
-    "last_pymnt_amnt",
-    "last_credit_pull_d"
-  ],
-  "dropped_id_text_columns": [
-    "member_id",
-    "url",
-    "desc",
-    "title",
-    "emp_title",
-    "zip_code"
-  ],
-  "dropped_sparse_columns": [
-    "mths_since_last_record"
-  ],
+  "rows_removed": {
+    "exact_duplicates": 165,
+    "age_above_100": 5,
+    "emp_length_above_age_minus_14": 2
+  },
+  "rows_removed_total": 172,
+  "default_rate_raw": 0.2182,
+  "default_rate_clean": 0.2187,
   "new_columns": [
-    "term_months",
-    "issue_date",
-    "credit_history_months",
-    "sub_grade_num",
-    "ever_delinquent",
-    "loan_to_income",
-    "installment_to_income",
-    "revol_bal_to_income"
+    "loan_id",
+    "loan_grade_num"
   ],
+  "converted_columns": {
+    "cb_person_default_on_file": "Y/N -> 1/0"
+  },
   "missing_share_after_cleaning": {
-    "emp_length": 0.027,
-    "mths_since_last_delinq": 0.6442,
-    "revol_util": 0.0013,
-    "pub_rec_bankruptcies": 0.0186
-  }
+    "person_emp_length": 0.0274,
+    "loan_int_rate": 0.0955
+  },
+  "note": "Missing values are imputed inside the model pipeline (fitted on the training split only)."
 }
