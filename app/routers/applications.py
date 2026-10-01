@@ -1,4 +1,5 @@
 """Score new loan applications and look at past ones."""
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -47,15 +48,24 @@ def list_applications(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     decision: Decision | None = Query(None, description="Only APPROVE, REVIEW or REJECT"),
+    date_from: date | None = Query(None, description="Created on or after this day (UTC), e.g. 2026-10-01"),
+    date_to: date | None = Query(None, description="Created on or before this day (UTC)"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Past applications, newest first."""
     query = select(LoanApplication).options(selectinload(LoanApplication.prediction), selectinload(LoanApplication.creator))
     count = select(func.count(LoanApplication.id))
+    conditions = []
+    if date_from:
+        conditions.append(LoanApplication.created_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
+    if date_to:   # whole day included: everything before the next midnight
+        conditions.append(LoanApplication.created_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc))
     if decision:
-        query = query.join(Prediction).where(Prediction.decision == decision)
-        count = count.join(Prediction).where(Prediction.decision == decision)
+        query, count = query.join(Prediction), count.join(Prediction)
+        conditions.append(Prediction.decision == decision)
+    if conditions:
+        query, count = query.where(*conditions), count.where(*conditions)
     rows = db.scalars(query.order_by(LoanApplication.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     return ApplicationPage(items=[to_out(a) for a in rows], total=db.scalar(count), page=page, page_size=page_size)
 

@@ -1,0 +1,9 @@
+# Streamlit settings (read when you run `streamlit run frontend/app.py` from the project folder)
+[client]
+toolbarMode = "minimal"      # hide the developer "Deploy" menu
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#2a78d6"     # same blue as the report charts

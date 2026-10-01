@@ -1,70 +1,21 @@
 """API tests with a temporary SQLite database (no Docker / PostgreSQL needed).
-
-The settings are set through environment variables BEFORE the app is imported, so the tests never use the
-real database or passwords from .env. The tables are created with the real Alembic migration.
-"""
-import os
-import sys
-import tempfile
-from pathlib import Path
+The database, settings and logged-in users come from tests/conftest.py."""
+from datetime import date, timedelta
 
 import pytest
 
-PROJECT_DIR = Path(__file__).resolve().parents[1]
-TMP_DIR = tempfile.mkdtemp(prefix="loan_api_test_")
-os.environ.update({
-    "DATABASE_URL": f"sqlite:///{TMP_DIR}/test.db",
-    "JWT_SECRET": "test-secret-not-used-anywhere-else",
-    "JWT_EXPIRE_MINUTES": "5",
-    "ADMIN_USERNAME": "test_admin", "ADMIN_PASSWORD": "admin-pass",
-    "OFFICER_USERNAME": "test_officer", "OFFICER_PASSWORD": "officer-pass",
-})
-sys.path.insert(0, str(PROJECT_DIR))
+from conftest import MODEL_READY, needs_model
 
-MODEL_READY = (PROJECT_DIR / "models" / "loan_default_model.joblib").exists()
-pytestmark = pytest.mark.skipif(not MODEL_READY, reason="run python src/tune.py and src/business.py first")
+pytestmark = needs_model
 
-if MODEL_READY:
-    from alembic import command
-    from alembic.config import Config
-    from fastapi.testclient import TestClient
-
+if MODEL_READY:                             # the app can only be imported once the model files exist
     from app.db import SessionLocal
-    from app.main import app
     from app.models import AuditLog
     from app.schemas import EXAMPLES
-    from app.seed import seed
 
-LOW = EXAMPLES["low_risk"]["value"] if MODEL_READY else {}
-HIGH = EXAMPLES["high_risk"]["value"] if MODEL_READY else {}
-
-
-@pytest.fixture(scope="module")
-def client():
-    cfg = Config(str(PROJECT_DIR / "alembic.ini"))
-    cfg.set_main_option("script_location", str(PROJECT_DIR / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
-    command.upgrade(cfg, "head")                      # the real migration, on SQLite
-    with SessionLocal() as db:
-        seed(db)
-    with TestClient(app) as c:                         # runs the startup: model + explainer loaded once
-        yield c
-
-
-def token(client, username, password):
-    r = client.post("/auth/login", data={"username": username, "password": password})
-    assert r.status_code == 200, r.text
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
-
-@pytest.fixture(scope="module")
-def admin(client):
-    return token(client, "test_admin", "admin-pass")
-
-
-@pytest.fixture(scope="module")
-def officer(client):
-    return token(client, "test_officer", "officer-pass")
+    LOW, HIGH = EXAMPLES["low_risk"]["value"], EXAMPLES["high_risk"]["value"]
+else:
+    LOW = HIGH = {}
 
 
 def test_health_is_public(client):
@@ -183,3 +134,17 @@ def test_swagger_has_examples(client):
     spec = client.get("/openapi.json").json()
     examples = spec["paths"]["/applications"]["post"]["requestBody"]["content"]["application/json"]["examples"]
     assert {"low_risk", "high_risk"} <= set(examples)
+
+
+def test_list_filter_by_date(client, officer):
+    client.post("/applications", json=LOW, headers=officer)
+    today = date.today()
+    all_items = client.get("/applications", headers=officer).json()["total"]
+    from_today = client.get("/applications", params={"date_from": (today - timedelta(days=1)).isoformat()},
+                            headers=officer).json()["total"]
+    future = client.get("/applications", params={"date_from": (today + timedelta(days=2)).isoformat()},
+                        headers=officer).json()["total"]
+    past = client.get("/applications", params={"date_to": (today - timedelta(days=2)).isoformat()},
+                      headers=officer).json()["total"]
+    assert from_today == all_items >= 1 and future == 0 and past == 0
+    assert client.get("/applications", params={"date_from": "not-a-date"}, headers=officer).status_code == 422

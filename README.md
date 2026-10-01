@@ -88,6 +88,11 @@ app/                FastAPI backend
   routers/          auth, applications, model, monitoring endpoints
   seed.py           creates the admin + officer users from .env
 alembic/, alembic.ini   database migrations
+frontend/           Streamlit app - talks ONLY to the API (API_URL in .env)
+  app.py            entry: login, sidebar, page navigation (Dashboard only for admins)
+  api.py            the API client: every call + friendly error messages (API down, expired login, 422 per field)
+  ui.py             shared display: probability text (< 1% / > 99%), decision banner, SHAP reasons chart
+  views/            new_application.py, history.py, dashboard.py
 scripts/benchmark_api.py  latency test against a running API
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights, executed)
@@ -148,6 +153,7 @@ python src/tune.py            # Optuna 50 trials + final model (~3 min) -> model
 python src/business.py        # decision cut-offs + NPA simulation (~10 s) -> reports/business_simulation.md
 python src/explain.py         # SHAP global charts (~6 s) -> reports/shap_insights.md
 uvicorn app.main:app --reload # the API (see "Backend API" below for migrations + users first)
+streamlit run frontend/app.py # the web app (second terminal, API must be running)
 jupyter nbconvert --to notebook --execute --inplace notebooks/02_model_and_shap.ipynb   # model + SHAP notebook
 pytest -q                     # run the tests
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda.ipynb   # re-run the EDA
@@ -333,6 +339,29 @@ After changing `app/models.py`: `alembic revision --autogenerate -m "what change
 
 Tests: `pytest -q tests/test_api.py` uses a temporary SQLite database built with the same Alembic migration -
 no Docker needed.
+
+`GET /applications` also takes `date_from` / `date_to` (YYYY-MM-DD, UTC, both days included) for the History page.
+
+## Frontend (Streamlit)
+
+With the API running (see above), in a second terminal:
+
+```bash
+source .venv/bin/activate
+streamlit run frontend/app.py        # opens http://localhost:8501
+```
+
+| Page | Who | What |
+|---|---|---|
+| Login | everyone | username + password from `.env`; the token is kept in the session, **Log out** in the sidebar |
+| New Application | logged in | 11 fields in three groups (Applicant, Loan, Credit history) with the API's limits and help text; "loan as % of income" is calculated live and read-only; the two optional fields have a *not known* box |
+| Result | logged in | decision with colour **and** icon **and** words (✅ APPROVE / ⚠️ REVIEW / ⛔ REJECT), probability (exact 0 / 1 shown as "< 1%" / "> 99%"), top 5 SHAP reasons as a chart (red = increases risk, blue = decreases) and as sentences |
+| History | logged in | past applications, filters for decision and dates, click a row for the details |
+| Dashboard | admin only | model version + test metrics, applications per day, latency, decision mix, latest drift status |
+
+Errors are shown as messages, never as stack traces: API not running, expired login (back to the login page),
+admin-only pages, and 422 validation errors shown in red under the field they belong to.
+The frontend never loads the model or the database - it only calls the API.
 
 ## Results so far
 
