@@ -392,7 +392,7 @@ def main() -> None:
         table.attrs.update(n_train=len(d["X_train"]), n_val=len(d["X_val"]), val_rate=float(d["y_val"].mean()))
         best = table.loc[0, "model"]
 
-        table.round(4).to_csv(REPORTS / "model_comparison.csv", index=False)
+        table.to_csv(REPORTS / "model_comparison.csv", index=False)
         write_markdown(table, best, perfect_rule_check(d["X_train"], d["y_train"]), REPORTS / "model_comparison.md")
         for fig in [plot_roc(curves, FIG / "13_roc_curves_validation.png"),
                     plot_pr(curves, FIG / "14_pr_curves_validation.png")]:

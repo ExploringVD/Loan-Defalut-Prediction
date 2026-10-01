@@ -255,6 +255,7 @@ def plot_optuna_history(study: optuna.Study, path):
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
+# Saved files keep metrics unrounded; round only when showing them (rounding twice can change the last digit).
 
 def write_report(info: dict, path):
     b, v, c, t = info["best_params"], info["val_tuned"], info["calibration"], info["test"]
@@ -466,12 +467,12 @@ def main() -> None:
             "categorical_features": CATEGORICAL_FEATURES,
             "best_params": best_params,
             "scale_pos_weight": round(float((y_train_val == 0).sum() / (y_train_val == 1).sum()), 4),
-            "best_cv_auc": round(best.value, 4),
-            "train_auc_tuned": round(train_auc, 4),
-            "val_tuned": {k: round(val, 4) for k, val in val_tuned.items()},
+            "best_cv_auc": float(best.value),
+            "train_auc_tuned": float(train_auc),
+            "val_tuned": {k: float(val) for k, val in val_tuned.items()},
             "calibration": {**calibration, "val": None if calibration["val"] is None else
-                            {k: round(val, 4) for k, val in calibration["val"].items()}},
-            "test": {k: (round(val, 4) if k != "confusion_matrix" else val) for k, val in test.items()},
+                            {k: float(val) for k, val in calibration["val"].items()}},
+            "test": {k: (float(val) if k != "confusion_matrix" else val) for k, val in test.items()},
             "threshold": THRESHOLD,
             "decision_cutoffs": None,   # filled in Step 5
             "n_trials": N_TRIALS, "n_complete": n_complete, "n_pruned": n_pruned,
@@ -482,9 +483,7 @@ def main() -> None:
         }
         joblib.dump(final, MODEL_PATH)
         META_PATH.write_text(json.dumps(info, indent=2))
-        # The report uses the unrounded numbers (rounding twice can change the last digit)
-        report_info = {**info, "best_cv_auc": best.value, "train_auc_tuned": train_auc, "val_tuned": val_tuned,
-                       "calibration": calibration, "test": test, "untuned_xgb": untuned,
+        report_info = {**info, "calibration": calibration, "untuned_xgb": untuned,
                        "gap_sentence": overfit_sentence(untuned, train_auc, val_tuned["roc_auc"])}
         write_report(report_info, REPORTS / "final_model.md")
         mlflow.log_artifact(str(META_PATH))

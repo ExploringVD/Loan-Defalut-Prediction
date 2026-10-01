@@ -45,17 +45,17 @@
     "gamma": 1.5408555752689765
   },
   "scale_pos_weight": 3.5721,
-  "best_cv_auc": 0.9465,
-  "train_auc_tuned": 0.9857,
+  "best_cv_auc": 0.9464885703521301,
+  "train_auc_tuned": 0.9856777161224153,
   "val_tuned": {
-    "roc_auc": 0.9575,
-    "pr_auc": 0.9154,
-    "ks": 0.7765,
-    "precision": 0.8212,
-    "recall": 0.8166,
-    "f1": 0.8189,
-    "brier": 0.0621,
-    "ece": 0.078
+    "roc_auc": 0.9574597167101211,
+    "pr_auc": 0.9153522109115022,
+    "ks": 0.7764520395400384,
+    "precision": 0.8211920529801324,
+    "recall": 0.8165569143932268,
+    "f1": 0.8188679245283019,
+    "brier": 0.062139544636011124,
+    "ece": 0.07799167665666337
   },
   "calibration": {
     "used": true,
@@ -72,14 +72,14 @@
     "decision": "calibration was poor (ECE 0.078 > 0.03). Isotonic calibration lowered the validation Brier score (0.0621 -> 0.0509) and ECE (0.078 -> 0.010), ROC-AUC 0.957 -> 0.957, so the final model is the CALIBRATED one."
   },
   "test": {
-    "roc_auc": 0.9515,
-    "pr_auc": 0.9086,
-    "ks": 0.7665,
-    "precision": 0.9747,
-    "recall": 0.7262,
-    "f1": 0.8323,
-    "brier": 0.0514,
-    "ece": 0.0039,
+    "roc_auc": 0.951520266882135,
+    "pr_auc": 0.9086425134376145,
+    "ks": 0.7665004183652825,
+    "precision": 0.9747474747474747,
+    "recall": 0.7262464722483537,
+    "f1": 0.832345013477089,
+    "brier": 0.05143980669851438,
+    "ece": 0.003887459688602722,
     "confusion_matrix": [
       [
         3779,

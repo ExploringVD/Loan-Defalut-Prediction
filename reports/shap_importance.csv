@@ -1,0 +1,12 @@
+rank,feature,label,mean_abs_shap,share,direction
+1,person_income,Yearly income,1.0841875754175514,0.21442518626149626,"higher value -> lower risk (lowest 20% of values +1.23, highest 20% -1.71)"
+2,loan_grade_num,Loan grade,0.8818762406307505,0.17441306416374525,"higher value -> higher risk (lowest 20% of values -1.00, highest 20% +0.71)"
+3,loan_percent_income,Loan as % of income,0.751721143825484,0.14867164126964505,"higher value -> higher risk (lowest 20% of values -0.24, highest 20% +1.30)"
+4,person_home_ownership,Home ownership,0.7262338912735383,0.14363090016574523,"lowest risk: OWN (-4.32), highest risk: RENT (+0.56)"
+5,loan_intent,Loan purpose,0.5891602773026874,0.11652116761239398,"lowest risk: VENTURE (-1.57), highest risk: HOMEIMPROVEMENT (+0.70)"
+6,loan_int_rate,Interest rate,0.3599318008005212,0.07118550809657076,"higher value -> higher risk (lowest 20% of values -0.83, highest 20% +0.37)"
+7,loan_amnt,Loan amount,0.2993829484550224,0.05921045946432351,"higher value -> higher risk (lowest 20% of values -0.36, highest 20% +0.50)"
+8,person_emp_length,Years employed,0.16890492767675216,0.03340517028487784,"higher value -> lower risk (lowest 20% of values +0.20, highest 20% -0.02)"
+9,person_age,Age,0.1306814972919407,0.025845531744784815,"higher value -> lower risk (lowest 20% of values +0.09, highest 20% -0.25)"
+10,cb_person_cred_hist_length,Credit history length,0.04739845330488122,0.009374228601071882,"higher value -> lower risk (lowest 20% of values -0.01, highest 20% -0.04)"
+11,cb_person_default_on_file,Past default on file,0.01677230445068623,0.003317142335345284,"past default +0.01, none -0.01"

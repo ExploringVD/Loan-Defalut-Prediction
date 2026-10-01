@@ -65,25 +65,30 @@ data/
   raw/            credit_risk_dataset.csv                       (Kaggle download, not in git)
   processed/      credit_clean.parquet, cleaning_report.json    (made by src/clean_data.py; .csv copy not in git)
 src/
-  clean_data.py     clean the raw data (duplicates, impossible rows, grade -> number, Y/N -> 1/0)
+  clean_data.py     clean the raw data (duplicates, impossible rows, grade -> number, Y/N -> 1/0);
+                    to_model_input() converts the 11 raw applicant fields for the model (used by SHAP + API)
   load_data.py      load cleaned data + 70/15/15 train/val/test split
   features.py       preprocessing (imputation, log, scaling, one-hot) for "linear" and "tree" models
   leakage_check.py  single-feature AUC + quick Logistic Regression / Gradient Boosting baselines + perfect-rule check
   train.py          train + compare 4 models (CV + validation), log everything to MLflow
   tune.py           Optuna tuning of XGBoost, calibration, ONE test evaluation, save + register the final model
   business.py       APPROVE / REVIEW / REJECT cut-offs (validation) + NPA reduction simulation (test)
+  decision.py       the band rule (APPROVE / REVIEW / REJECT), shared by business.py, explain.py and the API
+  explain.py        SHAP: explain_one(applicant) -> probability, band, top 5 reasons; global charts
 models/
   loan_default_model.joblib   final pipeline (preprocessing + calibrated XGBoost) used by the API
   model_meta.json             version, features, best params, test metrics, decision cut-offs, library versions
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights, executed)
+  02_model_and_shap.ipynb   model results (Steps 3-5) + SHAP explanations (executed)
 reports/
   eda_summary.md    key EDA findings table (for the project report)
   leakage_check.md  leakage check and baseline AUCs
   model_comparison.csv / .md   Step 3 model comparison
   final_model.md    Step 4 final model: best params, calibration, test metrics
   business_simulation.md / .csv   Step 5 decision bands and NPA reduction
-  figures/          all charts as PNG (01-12 EDA, 13-14 model comparison, 15-19 final model, 20-21 business)
+  shap_insights.md / shap_importance.csv   Step 6 features ranked by SHAP and what they mean for lending
+  figures/          all charts as PNG (01-12 EDA, 13-14 models, 15-19 final model, 20-21 business, 22-25 SHAP)
 mlflow.db, mlruns/  local MLflow tracking (made by src/train.py, not in git)
 tests/            pytest tests
 archive/          old Lending Club work (not in git)
@@ -130,6 +135,8 @@ python src/leakage_check.py   # single-feature AUC + quick baselines -> reports/
 python src/train.py           # train + compare 4 models (~35 s) -> reports/model_comparison.*, MLflow
 python src/tune.py            # Optuna 50 trials + final model (~3 min) -> models/, reports/final_model.md
 python src/business.py        # decision cut-offs + NPA simulation (~10 s) -> reports/business_simulation.md
+python src/explain.py         # SHAP global charts (~6 s) -> reports/shap_insights.md
+jupyter nbconvert --to notebook --execute --inplace notebooks/02_model_and_shap.ipynb   # model + SHAP notebook
 pytest -q                     # run the tests
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda.ipynb   # re-run the EDA
 ```
@@ -241,6 +248,39 @@ scores are honest; saved in `models/model_meta.json`):
 The 30% NPA-reduction target is met in both scenarios - but measured against "approve everyone", on a dataset
 with a perfect rule, with a simple money model. Read the caveats in `reports/business_simulation.md`.
 Charts: `reports/figures/20_decision_bands.png`, `21_npa_reduction.png`.
+
+## SHAP explanations (src/explain.py)
+
+The final model is a `CalibratedClassifierCV` (3 calibrated XGBoost pipelines). `explain.py` runs SHAP's
+`TreeExplainer` on each inner XGBoost model (with that pipeline's own preprocessor), averages the 3 results and adds
+one-hot / missing-flag columns back to the 11 original features. Base value + contributions = the average log-odds of
+the inner models (checked to 1e-5). The probability shown to users comes from the calibrated model.
+
+```python
+from explain import explain_one, reason_text
+result = explain_one({"person_age": 23, "person_income": 30000, "person_home_ownership": "RENT",
+                      "person_emp_length": 1, "loan_intent": "MEDICAL", "loan_grade": "D", "loan_amnt": 12000,
+                      "loan_int_rate": 15.5, "loan_percent_income": 0.4, "cb_person_default_on_file": "Y",
+                      "cb_person_cred_hist_length": 3})
+result["probability"], result["decision"]     # (1.0, 'REJECT')
+reason_text(result["reasons"])
+# ['Loan is 40% of yearly income - increases risk', 'Grade D loan - increases risk', 'Rents home - increases risk',
+#  'Yearly income of $30,000 - increases risk', '1 year employed - increases risk']
+```
+
+The explainer is built once (about 3 s) and then explains one applicant in about 20 ms.
+
+| Rank | Feature | Share of SHAP importance |
+|---|---|---|
+| 1 | Yearly income | 21% |
+| 2 | Loan grade | 17% |
+| 3 | Loan as % of income | 15% |
+| 4 | Home ownership | 14% |
+| 5 | Loan purpose | 12% |
+| ... | Past default on file (already inside the grade) | 0.3% |
+
+Loan-to-income works like a switch: SHAP -0.45 on average up to 30% of income, +3.73 for renters above 30%
+(chart 24). Full table and lending meaning: `reports/shap_insights.md`; walkthrough: `notebooks/02_model_and_shap.ipynb`.
 
 ## Results so far
 

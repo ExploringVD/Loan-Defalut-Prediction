@@ -4,10 +4,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from clean_data import clean, validate
+from clean_data import APPLICANT_FIELDS, clean, to_model_input, validate
 
 
 def raw_rows() -> pd.DataFrame:
@@ -57,3 +58,24 @@ def test_validate_passes_on_clean_data_and_fails_loudly():
 
     dup = pd.concat([df, df.iloc[[0]].assign(loan_id=99)], ignore_index=True)
     assert any("duplicate rows" in p for p in validate(dup))
+
+
+def test_to_model_input_matches_cleaning():
+    raw = raw_rows().drop(columns="loan_status")
+    X = to_model_input(raw.iloc[[4]].to_dict("records")[0])          # grade G, past default Y
+    assert X.loc[0, "loan_grade_num"] == 7 and X.loc[0, "cb_person_default_on_file"] == 1
+    assert list(X.columns)[-2:] == ["person_home_ownership", "loan_intent"]
+    assert X["person_age"].dtype == "float64"
+    assert len(APPLICANT_FIELDS) == 11
+
+
+def test_to_model_input_optional_and_bad_values():
+    applicant = raw_rows().drop(columns=["loan_status", "loan_int_rate", "person_emp_length"]).iloc[0].to_dict()
+    X = to_model_input(applicant)                                     # optional fields may be left out
+    assert X[["loan_int_rate", "person_emp_length"]].isna().all(axis=None)
+    with pytest.raises(ValueError):
+        to_model_input({**applicant, "loan_grade": "Z"})
+    with pytest.raises(ValueError):
+        to_model_input({**applicant, "cb_person_default_on_file": "maybe"})
+    with pytest.raises(ValueError):
+        to_model_input({k: v for k, v in applicant.items() if k != "person_income"})

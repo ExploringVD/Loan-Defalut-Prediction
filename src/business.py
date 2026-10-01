@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 
+from decision import BANDS, assign_bands
 from load_data import get_splits
 from train import FIG, INK, INK2, MUTED, PROJECT_DIR, REPORTS
 from tune import META_PATH, MODEL_PATH, build_xgb_pipeline
@@ -41,7 +42,6 @@ MIN_DEFAULTERS_FLAGGED = 0.90   # REVIEW + REJECT must hold at least 90% of defa
 CUTOFF_GRID = np.round(np.arange(0.05, 0.96, 0.05), 2)
 NPA_TARGET = 0.30               # synopsis target: 30% NPA reduction
 
-BANDS = ["APPROVE", "REVIEW", "REJECT"]
 # Fixed status colours (good / warning / critical); every chart also writes the band name, never colour alone
 BAND_COLORS = {"APPROVE": "#0ca30c", "REVIEW": "#fab219", "REJECT": "#d03b3b"}
 BLUE, ORANGE = "#2a78d6", "#eb6834"
@@ -90,11 +90,6 @@ def choose_cutoffs(y, p) -> tuple[float, float]:
     if review >= reject:
         raise ValueError(f"review cut-off {review} is not below reject cut-off {reject}")
     return review, reject
-
-
-def assign_bands(p, review_cutoff: float, reject_cutoff: float) -> np.ndarray:
-    p = np.asarray(p)
-    return np.where(p >= reject_cutoff, "REJECT", np.where(p >= review_cutoff, "REVIEW", "APPROVE"))
 
 
 def band_table(y, bands) -> pd.DataFrame:
@@ -412,7 +407,7 @@ def main() -> None:
     plot_decision_bands(d["y_val"], p_val, val_bands, d["y_test"], test_bands, review, reject,
                         FIG / "20_decision_bands.png")
     plot_npa_reduction(sim, FIG / "21_npa_reduction.png")
-    sim.round(4).to_csv(REPORTS / "business_simulation.csv", index=False)
+    sim.to_csv(REPORTS / "business_simulation.csv", index=False)
     write_report({"tradeoff": trade, "pairs": pairs, "val_bands": vb, "test_bands": tb, "sim": sim,
                   "review": review, "reject": reject, "n_val": len(d["X_val"])},
                  REPORTS / "business_simulation.md")

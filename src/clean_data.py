@@ -79,6 +79,39 @@ def clean(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     return df[front + middle + back].reset_index(drop=True), removed
 
 
+# The 11 raw applicant fields (same names as the Kaggle file, without the target). The API, the Streamlit form,
+# SHAP explanations and batch scoring all send these and convert them with to_model_input().
+APPLICANT_FIELDS = [c for c in RAW_COLUMNS if c != TARGET]
+OPTIONAL_FIELDS = ["person_emp_length", "loan_int_rate"]   # may be missing -> imputed inside the model pipeline
+
+
+def to_model_input(applicants) -> pd.DataFrame:
+    """Turn one applicant (dict) or several (list of dicts / DataFrame) with the 11 raw fields into the
+    model's input table: loan_grade A-G -> loan_grade_num 1-7, cb_person_default_on_file Y/N -> 1/0,
+    columns in the order of load_data.FEATURES. Uses the same maps as clean() so there is only one conversion."""
+    from load_data import CATEGORICAL_FEATURES, FEATURES, NUMERIC_FEATURES   # local import: load_data is the feature list owner
+
+    df = pd.DataFrame([applicants] if isinstance(applicants, dict) else applicants).copy()
+    missing = [c for c in APPLICANT_FIELDS if c not in df.columns and c not in OPTIONAL_FIELDS]
+    if missing:
+        raise ValueError(f"missing applicant fields: {missing}")
+    for c in OPTIONAL_FIELDS:
+        if c not in df.columns:
+            df[c] = None
+    for c in ["person_home_ownership", "loan_intent", "loan_grade", "cb_person_default_on_file"]:
+        df[c] = df[c].astype("string").str.strip().str.upper()
+    df["loan_grade_num"] = df["loan_grade"].map(GRADE_MAP)
+    df["cb_person_default_on_file"] = df["cb_person_default_on_file"].map(YES_NO_MAP)
+    if df["loan_grade_num"].isna().any():
+        raise ValueError("loan_grade must be one of A-G")
+    if df["cb_person_default_on_file"].isna().any():
+        raise ValueError("cb_person_default_on_file must be Y or N")
+    X = df[FEATURES].copy()
+    X[NUMERIC_FEATURES] = X[NUMERIC_FEATURES].apply(pd.to_numeric, errors="coerce").astype("float64")
+    X[CATEGORICAL_FEATURES] = X[CATEGORICAL_FEATURES].astype(object)
+    return X
+
+
 def validate(df: pd.DataFrame) -> list[str]:
     """Checks that fail loudly if something is wrong with the cleaned data."""
     problems = []
