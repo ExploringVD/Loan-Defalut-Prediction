@@ -18,3 +18,10 @@ mlflow.db
 # Logs and generated reports
 *.log
 reports/drift/*.html
+
+# Local helper files (kept on this machine, not pushed)
+CLAUDE.md
+prompts/
+
+# CSV copies of processed data (the .parquet files are pushed)
+data/processed/*.csv

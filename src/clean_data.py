@@ -1,10 +1,10 @@
 """
-Step 1 of the pipeline: clean the raw Lending Club files and save them for training.
+Clean the raw Lending Club files and save them for training.
 
 Input  (data/raw/):        loan_train.csv, loan_test.csv
 Output (data/processed/):  train_clean.parquet, test_clean.parquet
                            train_clean.csv,     test_clean.csv   (for viewing in Excel/Numbers)
-                           cleaning_report.json                  (what changed, for the report/viva)
+                           cleaning_report.json                  (summary of what changed)
 
 Run from the project folder:
     python src/clean_data.py

@@ -1,4 +1,4 @@
-# Only PostgreSQL for now. API and frontend containers are added in the packaging step.
+# PostgreSQL database for the API (users, applications, predictions, audit log).
 services:
   db:
     image: postgres:16

@@ -1,5 +1,5 @@
 """
-Step 2: load the cleaned data for model training.
+Load the cleaned data for model training.
 
 Usage in a notebook or training script:
     from load_data import get_splits, NUMERIC_FEATURES, CATEGORICAL_FEATURES

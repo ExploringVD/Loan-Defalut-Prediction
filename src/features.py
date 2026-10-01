@@ -1,5 +1,5 @@
 """
-Step 3: preprocessing (imputation, scaling, encoding) as an unfitted scikit-learn ColumnTransformer.
+Preprocessing (imputation, scaling, encoding) as an unfitted scikit-learn ColumnTransformer.
 
 The preprocessor is always put inside a Pipeline together with the model, so it is fitted on the
 training data only (no leakage) and the same saved pipeline is reused by the API and the drift checks.

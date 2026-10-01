@@ -9,9 +9,9 @@ data/
   raw/          loan_train.csv, loan_test.csv, loan_sample_submission.csv  (Kaggle, Lending Club 2007-2011)
   processed/    train_clean.*, test_clean.*, cleaning_report.json          (made by src/clean_data.py)
 src/
-  clean_data.py   step 1: clean raw data
-  load_data.py    step 2: load cleaned data + 70/15/15 train/val/test split
-  features.py     step 3: preprocessing (imputation, log, scaling, one-hot) for "linear" and "tree" models
+  clean_data.py   clean the raw data
+  load_data.py    load cleaned data + 70/15/15 train/val/test split
+  features.py     preprocessing (imputation, log, scaling, one-hot) for "linear" and "tree" models
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights)
 reports/
@@ -26,7 +26,8 @@ docker-compose.yml  PostgreSQL 16 (service "db")
 ## Setup (once)
 
 ```bash
-cd ~/Desktop/"Loan Defalut Prediction"
+git clone https://github.com/ExploringVD/Loan-Defalut-Prediction.git
+cd Loan-Defalut-Prediction
 uv venv --python 3.12
 source .venv/bin/activate
 uv pip install -r requirements.txt
