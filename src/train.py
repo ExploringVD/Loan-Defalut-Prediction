@@ -61,9 +61,10 @@ ARTIFACT_DIR = PROJECT_DIR / "mlruns"
 EXPERIMENT = "loan-default"
 
 # MLflow saves sklearn models with skops (safer than pickle: it only loads types it is told to trust).
-# These are the non-standard types inside our four pipelines - all from libraries we install ourselves.
+# These are the non-standard types inside our pipelines (Step 3 models + the calibrated model of Step 4),
+# all from libraries we install ourselves.
 SKOPS_TRUSTED_TYPES = [
-    "numpy.dtype", "sklearn.tree._tree.Tree",
+    "numpy.dtype", "sklearn.tree._tree.Tree", "sklearn.calibration._CalibratedClassifier",
     "xgboost.core.Booster", "xgboost.sklearn.XGBClassifier",
     "imblearn.pipeline.Pipeline", "imblearn.over_sampling._smote.base.SMOTE",
 ]

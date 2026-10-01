@@ -1,0 +1,110 @@
+{
+  "model_name": "loan_default_model",
+  "version": "1",
+  "model_type": "XGBoost pipeline + isotonic calibration",
+  "calibrated": true,
+  "training_date": "2026-10-01T05:58:58+00:00",
+  "target": "loan_status",
+  "positive_class": "1 = defaulted",
+  "features": [
+    "person_age",
+    "person_income",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_int_rate",
+    "loan_percent_income",
+    "loan_grade_num",
+    "cb_person_default_on_file",
+    "cb_person_cred_hist_length",
+    "person_home_ownership",
+    "loan_intent"
+  ],
+  "numeric_features": [
+    "person_age",
+    "person_income",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_int_rate",
+    "loan_percent_income",
+    "loan_grade_num",
+    "cb_person_default_on_file",
+    "cb_person_cred_hist_length"
+  ],
+  "categorical_features": [
+    "person_home_ownership",
+    "loan_intent"
+  ],
+  "best_params": {
+    "learning_rate": 0.06891497433071171,
+    "max_depth": 4,
+    "min_child_weight": 3,
+    "subsample": 0.8912129292165369,
+    "colsample_bytree": 0.6543984423152585,
+    "n_estimators": 1000,
+    "reg_lambda": 1.6556582646655984,
+    "gamma": 1.5408555752689765
+  },
+  "scale_pos_weight": 3.5721,
+  "best_cv_auc": 0.9465,
+  "train_auc_tuned": 0.9857,
+  "val_tuned": {
+    "roc_auc": 0.9575,
+    "pr_auc": 0.9154,
+    "ks": 0.7765,
+    "precision": 0.8212,
+    "recall": 0.8166,
+    "f1": 0.8189,
+    "brier": 0.0621,
+    "ece": 0.078
+  },
+  "calibration": {
+    "used": true,
+    "val": {
+      "roc_auc": 0.9567,
+      "pr_auc": 0.9143,
+      "ks": 0.7745,
+      "precision": 0.9724,
+      "recall": 0.7291,
+      "f1": 0.8333,
+      "brier": 0.0509,
+      "ece": 0.0103
+    },
+    "decision": "calibration was poor (ECE 0.078 > 0.03). Isotonic calibration lowered the validation Brier score (0.0621 -> 0.0509) and ECE (0.078 -> 0.010), ROC-AUC 0.957 -> 0.957, so the final model is the CALIBRATED one."
+  },
+  "test": {
+    "roc_auc": 0.9515,
+    "pr_auc": 0.9086,
+    "ks": 0.7665,
+    "precision": 0.9747,
+    "recall": 0.7262,
+    "f1": 0.8323,
+    "brier": 0.0514,
+    "ece": 0.0039,
+    "confusion_matrix": [
+      [
+        3779,
+        20
+      ],
+      [
+        291,
+        772
+      ]
+    ]
+  },
+  "threshold": 0.5,
+  "decision_cutoffs": null,
+  "n_trials": 50,
+  "n_complete": 47,
+  "n_pruned": 3,
+  "n_train": 22685,
+  "n_train_val": 27547,
+  "n_test": 4862,
+  "mlflow_run_id": "74329667cadc4484be0b65b5f44a48db",
+  "versions": {
+    "python": "3.12.14",
+    "scikit-learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "optuna": "5.0.0",
+    "mlflow": "3.16.1"
+  }
+}

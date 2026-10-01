@@ -70,13 +70,18 @@ src/
   features.py       preprocessing (imputation, log, scaling, one-hot) for "linear" and "tree" models
   leakage_check.py  single-feature AUC + quick Logistic Regression / Gradient Boosting baselines + perfect-rule check
   train.py          train + compare 4 models (CV + validation), log everything to MLflow
+  tune.py           Optuna tuning of XGBoost, calibration, ONE test evaluation, save + register the final model
+models/
+  loan_default_model.joblib   final pipeline (preprocessing + calibrated XGBoost) used by the API
+  model_meta.json             version, features, best params, test metrics, library versions
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights, executed)
 reports/
   eda_summary.md    key EDA findings table (for the project report)
   leakage_check.md  leakage check and baseline AUCs
   model_comparison.csv / .md   Step 3 model comparison
-  figures/          all charts as PNG (01-12 EDA, 13-14 model comparison)
+  final_model.md    Step 4 final model: best params, calibration, test metrics
+  figures/          all charts as PNG (01-12 EDA, 13-14 model comparison, 15-19 final model)
 mlflow.db, mlruns/  local MLflow tracking (made by src/train.py, not in git)
 tests/            pytest tests
 archive/          old Lending Club work (not in git)
@@ -121,6 +126,7 @@ python src/clean_data.py      # re-creates data/processed from data/raw (needs t
 python src/load_data.py       # prints the train/val/test sizes and default rates
 python src/leakage_check.py   # single-feature AUC + quick baselines -> reports/leakage_check.md
 python src/train.py           # train + compare 4 models (~35 s) -> reports/model_comparison.*, MLflow
+python src/tune.py            # Optuna 50 trials + final model (~3 min) -> models/, reports/final_model.md
 pytest -q                     # run the tests
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda.ipynb   # re-run the EDA
 ```
@@ -177,6 +183,37 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db     # takes ~20 s to start
 Open http://127.0.0.1:5000, choose the experiment **loan-default**, expand **model_comparison** to see the four
 models, tick them and press **Compare**. Stop the UI with Ctrl+C.
 
+## Final model (src/tune.py)
+
+1. **Optuna** (TPE sampler, MedianPruner, 50 trials: 47 completed, 3 pruned) tunes 8 XGBoost hyperparameters on the
+   mean 5-fold CV ROC-AUC of the training split. Every trial is a nested MLflow run.
+2. The best pipeline is fitted on the training split and checked on the validation split (overfitting check).
+3. **Calibration check on the validation split:** `scale_pos_weight` made the probabilities too high
+   (expected calibration error 0.078). Isotonic calibration (`CalibratedClassifierCV`, cv=3) brought it to 0.010
+   and lowered the Brier score (0.0621 -> 0.0509) with the same AUC, so the final model is calibrated.
+4. Refit on train + validation (27,547 loans), then **one** evaluation on the test split (4,862 loans).
+5. Saved to `models/loan_default_model.joblib` + `models/model_meta.json` and registered in MLflow as
+   `loan_default_model` (version 1, alias `production`).
+
+| | CV ROC-AUC | Train ROC-AUC | Validation ROC-AUC | Train - validation gap |
+|---|---|---|---|---|
+| XGBoost untuned (Step 3) | 0.942 | 0.995 | 0.955 | 0.040 |
+| XGBoost tuned | 0.946 | 0.986 | 0.957 | 0.028 |
+
+**Test split (used once):** ROC-AUC **0.952**, PR-AUC 0.909, KS 0.767, Brier 0.0514, calibration error 0.004.
+At threshold 0.5: precision 0.975, recall 0.726 (772 of 1,063 defaults caught, 20 of 3,799 good loans wrongly flagged).
+The 0.85 AUC target is met without leakage. Best parameters, the calibration decision and all charts
+(15-19): `reports/final_model.md`.
+
+Load the model in Python:
+
+```python
+import joblib
+model = joblib.load("models/loan_default_model.joblib")      # full pipeline: takes the 11 raw feature columns
+model.predict_proba(X)[:, 1]                                  # probability of default (calibrated)
+# or from the MLflow registry:  mlflow.sklearn.load_model("models:/loan_default_model@production")
+```
+
 ## Results so far
 
 | | Validation ROC-AUC |
@@ -184,7 +221,9 @@ models, tick them and press **Compare**. Stop the UI with Ctrl+C.
 | Best single feature (loan_grade_num) | 0.725 |
 | Logistic Regression (untuned, quick baseline) | 0.878 |
 | Gradient Boosting (untuned, quick baseline) | 0.936 |
-| **XGBoost (Step 3, untuned)** | **0.955** (CV 0.942) |
+| XGBoost (Step 3, untuned) | 0.955 (CV 0.942) |
+| XGBoost tuned (Step 4) | 0.957 (CV 0.946) |
+| **Final calibrated model - TEST split** | **0.952** |
 
 No feature passes the 0.90 single-feature leakage alarm and no model passes 0.97 (`reports/leakage_check.md`).
 Key EDA findings: `reports/eda_summary.md`.
