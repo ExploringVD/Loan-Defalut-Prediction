@@ -11,6 +11,7 @@ data/
 src/
   clean_data.py   step 1: clean raw data
   load_data.py    step 2: load cleaned data + 70/15/15 train/val/test split
+  features.py     step 3: preprocessing (imputation, log, scaling, one-hot) for "linear" and "tree" models
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights)
 reports/
@@ -55,6 +56,23 @@ python src/clean_data.py   # re-creates data/processed from data/raw
 python src/load_data.py    # prints the train/val/test sizes
 pytest -q                  # run the tests
 ```
+
+## Preprocessing (src/features.py)
+
+`build_preprocessor(kind)` returns an **unfitted** `ColumnTransformer`. It always goes inside a
+`Pipeline` with the model, so imputation medians, scaler means and categories are learned from the
+training rows only.
+
+| | `"linear"` (Logistic Regression) | `"tree"` (Random Forest / XGBoost) |
+|---|---|---|
+| Missing numbers | median + `<col>_missing` flag | median (+ flag for `mths_since_last_delinq`) |
+| Skewed columns | `log1p` (annual_inc, revol_bal, loan_to_income, revol_bal_to_income) | unchanged |
+| Scaling | StandardScaler | none |
+| Categoricals | one-hot, categories with < 20 rows -> `<col>_other`, unseen -> all zeros | same |
+| Correlated pairs | drops sub_grade_num, installment, installment_to_income, pub_rec_bankruptcies (`LINEAR_DROP_FEATURES`) | keeps all |
+| Output columns | 93 | 95 |
+
+`get_feature_names(fitted)` gives readable names (e.g. `emp_length_missing`, `addr_state_other`) for SHAP.
 
 ## Dataset summary
 
