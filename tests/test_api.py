@@ -148,3 +148,39 @@ def test_list_filter_by_date(client, officer):
                       headers=officer).json()["total"]
     assert from_today == all_items >= 1 and future == 0 and past == 0
     assert client.get("/applications", params={"date_from": "not-a-date"}, headers=officer).status_code == 422
+
+
+def test_drift_endpoints(client, admin, officer):
+    """No report -> 404; officer blocked; live mode skipped with few applications; demo batch stored and returned."""
+    assert client.get("/monitoring/drift/latest", headers=admin).status_code == 404
+    assert client.post("/monitoring/drift/run", params={"batch": "drift"}, headers=officer).status_code == 403
+    assert client.post("/monitoring/drift/run", params={"batch": "yesterday"}, headers=admin).status_code == 422
+
+    skipped = client.post("/monitoring/drift/run", params={"batch": "live"}, headers=admin).json()
+    assert skipped["status"] == "SKIPPED" and "at least 50" in skipped["message"]
+    assert client.get("/monitoring/drift/latest", headers=admin).status_code == 404     # nothing stored
+
+    r = client.post("/monitoring/drift/run", params={"batch": "drift"}, headers=admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "DRIFT DETECTED" and "loan_int_rate" in r.json()["drifted_features"]
+    latest = client.get("/monitoring/drift/latest", headers=admin).json()
+    assert set(latest) == {"created_at", "batch_name", "drift_share", "dataset_drift", "prediction_psi", "status",
+                           "report_path"}
+    assert latest["batch_name"] == "drift" and latest["status"] == "DRIFT DETECTED" and latest["dataset_drift"]
+
+    client.post("/monitoring/drift/run", params={"batch": "no_drift"}, headers=admin)
+    assert client.get("/monitoring/drift/latest", headers=admin).json()["status"] == "NO DRIFT"
+    with SessionLocal() as db:
+        assert db.query(AuditLog).filter_by(username="test_admin", action="drift_check").count() == 2
+
+
+def test_scheduler_is_off_in_tests_and_runs_daily_at_2(monkeypatch):
+    from app.scheduler import JOB_ID, start_scheduler
+    assert start_scheduler() is None                       # DRIFT_SCHEDULER=0 in conftest.py
+    monkeypatch.setenv("DRIFT_SCHEDULER", "1")
+    scheduler = start_scheduler()
+    try:
+        trigger = str(scheduler.get_job(JOB_ID).trigger)
+        assert "hour='2'" in trigger and "minute='0'" in trigger
+    finally:
+        scheduler.shutdown(wait=False)

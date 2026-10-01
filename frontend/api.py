@@ -126,6 +126,10 @@ class ApiClient:
     def stats(self) -> dict:
         return self._request("GET", "/monitoring/stats")
 
+    def run_drift(self, batch: str) -> dict:
+        """Run a drift check now: batch = 'live', 'drift' or 'no_drift' (admin only, takes a few seconds)."""
+        return self._request("POST", "/monitoring/drift/run", params={"batch": batch})
+
     def latest_drift(self) -> dict | None:
         """Latest drift check, or None if there is none yet (the drift endpoints arrive in Step 9)."""
         try:

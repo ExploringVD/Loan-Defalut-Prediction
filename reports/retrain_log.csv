@@ -1,0 +1,2 @@
+time,production_version,n_old,n_new_added,n_train,n_holdout,holdout_default_rate,production_auc,candidate_auc,decision,applied,backup
+2026-10-01T09:00:53+00:00,1,27547,1000,28547,1000,0.229,0.9596452177459093,0.9609139154616869,REPLACE,False,

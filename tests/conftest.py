@@ -17,6 +17,8 @@ os.environ.update({
     "DATABASE_URL": f"sqlite:///{TMP_DIR}/test.db",
     "JWT_SECRET": "test-secret-not-used-anywhere-else",
     "JWT_EXPIRE_MINUTES": "5",
+    "DRIFT_SCHEDULER": "0",                       # never start the daily drift job inside the tests
+    "DRIFT_REPORT_DIR": f"{TMP_DIR}/drift",       # drift reports made by tests do not land in reports/drift/
     "ADMIN_USERNAME": "test_admin", "ADMIN_PASSWORD": "admin-pass",
     "OFFICER_USERNAME": "test_officer", "OFFICER_PASSWORD": "officer-pass",
 })

@@ -142,6 +142,35 @@ class DayStats(BaseModel):
     reject: int
 
 
+class DriftReportOut(BaseModel):
+    """Latest drift check (what the Dashboard shows)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    created_at: datetime
+    batch_name: str
+    drift_share: float = Field(description="Share of the 11 features that drifted")
+    dataset_drift: bool
+    prediction_psi: float = Field(description="PSI of the predicted probability")
+    status: Literal["DRIFT DETECTED", "NO DRIFT"]
+    report_path: str | None
+
+
+class DriftRunOut(BaseModel):
+    """Result of POST /monitoring/drift/run (status SKIPPED when live mode has too few applications)."""
+    status: Literal["DRIFT DETECTED", "NO DRIFT", "SKIPPED"]
+    batch_name: str
+    message: str | None = None
+    n_current: int
+    created_at: datetime | None = None
+    drift_share: float | None = None
+    n_drifted: int | None = None
+    drifted_features: list[str] = []
+    dataset_drift: bool | None = None
+    prediction_psi: float | None = None
+    mean_probability: dict[str, float] | None = None
+    report_path: str | None = None
+
+
 class StatsOut(BaseModel):
     total_requests: int
     avg_latency_ms: float | None

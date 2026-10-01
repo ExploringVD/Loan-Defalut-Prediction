@@ -66,10 +66,28 @@ def page() -> None:
     right.plotly_chart(decision_mix, width="stretch")
 
     st.subheader("Data drift")
+    st.caption("A drift check compares new applications with the training data. It runs every day at 02:00 on the "
+               "applications of the last 30 days (needs at least 50); the demo batches are simulated from the test split.")
     if drift is None:
-        st.info("No drift check has run yet. Drift monitoring is added in Step 9.", icon="ℹ️")
+        st.info("No drift check has run yet.", icon="ℹ️")
     else:
         text = (f"**{drift['status']}** - {drift['batch_name']} checked on {ui.format_time(drift['created_at'])}: "
                 f"{drift['drift_share']:.0%} of features drifted, prediction PSI {drift['prediction_psi']:.3f}")
         (st.error if drift["status"] == "DRIFT DETECTED" else st.success)(
             text, icon="🚨" if drift["status"] == "DRIFT DETECTED" else "✅")
+
+    with st.expander("Run a drift check now"):
+        batch = st.radio("Data to check", ["live", "no_drift", "drift"], horizontal=True, key="drift_batch",
+                         format_func={"live": "Live applications (last 30 days)",
+                                      "no_drift": "Demo: batch without drift", "drift": "Demo: batch with drift"}.get)
+        if st.button("Run drift check", key="run_drift"):
+            with st.spinner("Comparing with the training data..."):
+                try:
+                    result = client.run_drift(batch)
+                except ApiError as e:
+                    st.error(e.message)
+                    return
+            if result["status"] == "SKIPPED":
+                st.warning(result["message"], icon="⏭️")
+            else:
+                st.rerun()   # show the new result at the top of this section

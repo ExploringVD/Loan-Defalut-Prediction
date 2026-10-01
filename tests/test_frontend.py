@@ -189,13 +189,21 @@ def test_dashboard_admin_only(wired):
         from views import dashboard
         dashboard.page()
 
-    at = AppTest.from_function(dashboard_page, default_timeout=60)
-    at.session_state["token"] = token_for(wired, "test_admin", "admin-pass")
+    admin_token = token_for(wired, "test_admin", "admin-pass")
+    wired.post("/monitoring/drift/run", params={"batch": "drift"}, headers={"Authorization": f"Bearer {admin_token}"})
+
+    at = AppTest.from_function(dashboard_page, default_timeout=120)
+    at.session_state["token"] = admin_token
     at.run()
     assert not at.exception
     labels = [m.label for m in at.metric]
     assert "Test ROC-AUC" in labels and "Applications scored" in labels
-    assert any("No drift check has run yet" in i.value for i in at.info)
+    assert any("DRIFT DETECTED" in e.value for e in at.error)            # latest check shown in red
+
+    at.radio(key="drift_batch").set_value("no_drift")                  # the "Run drift check" button
+    at.button(key="run_drift").click().run()
+    assert not at.exception
+    assert any("NO DRIFT" in s.value for s in at.success)               # new result shown in green
 
     at.session_state["token"] = token_for(wired, "test_officer", "officer-pass")   # an officer calling the API directly
     at.run()

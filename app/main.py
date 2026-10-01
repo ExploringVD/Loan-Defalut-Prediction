@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.routers import applications, auth, model, monitoring
+from app.scheduler import start_scheduler
 from app.services.scoring import load_model, model_meta
 
 logger = logging.getLogger("uvicorn.error")
@@ -23,7 +24,10 @@ async def lifespan(app: FastAPI):
     seconds = load_model()
     app.state.model_load_seconds = round(seconds, 2)
     logger.info("Model version %s and SHAP explainer loaded in %.1f s", model_meta()["version"], seconds)
+    scheduler = start_scheduler()          # daily drift check at 02:00 (off when DRIFT_SCHEDULER=0)
     yield
+    if scheduler:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(

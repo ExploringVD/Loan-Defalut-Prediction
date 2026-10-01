@@ -29,3 +29,7 @@ data/processed/*.csv
 # Raw data (download from Kaggle, see README) and the archived Lending Club work (kept on disk only)
 data/raw/
 archive/
+
+# Simulated drift batches (python src/simulate_batches.py) and drift run outputs
+data/simulated/
+reports/drift/

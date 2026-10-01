@@ -75,6 +75,9 @@ src/
   business.py       APPROVE / REVIEW / REJECT cut-offs (validation) + NPA reduction simulation (test)
   decision.py       the band rule (APPROVE / REVIEW / REJECT), shared by business.py, explain.py and the API
   explain.py        SHAP: explain_one(applicant) -> probability, band, top 5 reasons; global charts
+  simulate_batches.py  simulated "current" batches for drift (no_drift / drift) from the test split
+  drift.py          drift check with Evidently + PSI of the predicted probability, alert rule, HTML/JSON reports
+  retrain.py        retraining with a safety check (replace only if the hold-out AUC is not worse), backup + restore
 models/
   loan_default_model.joblib   final pipeline (preprocessing + calibrated XGBoost) used by the API
   model_meta.json             version, features, best params, test metrics, decision cut-offs, library versions
@@ -85,7 +88,9 @@ app/                FastAPI backend
   schemas.py        input validation (the 11 fields) and response shapes
   auth.py           bcrypt passwords + JWT tokens, roles admin / officer
   services/scoring.py   calls src/explain.py (probability, band, top 5 reasons)
-  routers/          auth, applications, model, monitoring endpoints
+  routers/          auth, applications, model, monitoring (stats + drift) endpoints
+  services/drift_service.py  drift checks for the API: live / simulated batch, stores drift_reports
+  scheduler.py      APScheduler: daily drift check at 02:00 (DRIFT_SCHEDULER=0 turns it off)
   seed.py           creates the admin + officer users from .env
 alembic/, alembic.ini   database migrations
 frontend/           Streamlit app - talks ONLY to the API (API_URL in .env)
@@ -97,6 +102,7 @@ scripts/benchmark_api.py  latency test against a running API
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights, executed)
   02_model_and_shap.ipynb   model results (Steps 3-5) + SHAP explanations (executed)
+  03_drift_demo.ipynb       simulated drift: batches, drifting features, prediction shift, retraining decision (executed)
 reports/
   eda_summary.md    key EDA findings table (for the project report)
   leakage_check.md  leakage check and baseline AUCs
@@ -104,7 +110,10 @@ reports/
   final_model.md    Step 4 final model: best params, calibration, test metrics
   business_simulation.md / .csv   Step 5 decision bands and NPA reduction
   shap_insights.md / shap_importance.csv   Step 6 features ranked by SHAP and what they mean for lending
-  figures/          all charts as PNG (01-12 EDA, 13-14 models, 15-19 final model, 20-21 business, 22-25 SHAP)
+  drift_summary.md  Step 9 drift check of the two simulated batches
+  retrain_report.md / retrain_log.csv   Step 9 retraining decisions
+  drift/            HTML + JSON of every drift check (not in git)
+  figures/          all charts as PNG (01-12 EDA, 13-14 models, 15-19 final model, 20-21 business, 22-25 SHAP, 26-28 drift)
 mlflow.db, mlruns/  local MLflow tracking (made by src/train.py, not in git)
 tests/            pytest tests
 archive/          old Lending Club work (not in git)
@@ -152,6 +161,9 @@ python src/train.py           # train + compare 4 models (~35 s) -> reports/mode
 python src/tune.py            # Optuna 50 trials + final model (~3 min) -> models/, reports/final_model.md
 python src/business.py        # decision cut-offs + NPA simulation (~10 s) -> reports/business_simulation.md
 python src/explain.py         # SHAP global charts (~6 s) -> reports/shap_insights.md
+python src/simulate_batches.py  # the two simulated drift batches -> data/simulated/
+python src/drift.py           # drift check of both batches -> reports/drift_summary.md, reports/drift/
+python src/retrain.py         # retraining check (logs the decision; --apply replaces the model)
 uvicorn app.main:app --reload # the API (see "Backend API" below for migrations + users first)
 streamlit run frontend/app.py # the web app (second terminal, API must be running)
 jupyter nbconvert --to notebook --execute --inplace notebooks/02_model_and_shap.ipynb   # model + SHAP notebook
@@ -363,6 +375,64 @@ Errors are shown as messages, never as stack traces: API not running, expired lo
 admin-only pages, and 422 validation errors shown in red under the field they belong to.
 The frontend never loads the model or the database - it only calls the API.
 
+## Drift monitoring and retraining
+
+The dataset has **no dates**, so drift is **simulated**. `src/simulate_batches.py` builds two batches of 2,000 loans
+from the test split (saved in `data/simulated/`, not in git):
+
+| | Training data | no_drift batch | drift batch |
+|---|---|---|---|
+| Mean interest rate | 10.9% | 11.0% | **13.9%** (+3 points) |
+| Mean yearly income | $66,106 | $64,421 | **$56,730** (-15%) |
+| Mean loan / income | 0.170 | 0.170 | **0.197** (recomputed) |
+| Debt consolidation + medical loans | 35% | 35% | **50%** |
+
+`src/drift.py` compares a batch with the training split using **Evidently 0.7** (Wasserstein distance for numbers,
+Jensen-Shannon distance for categories, threshold 0.1) and computes the **PSI** of the model's predicted probability.
+Alert rule: **more than 30% of the 11 features drifted, or prediction PSI above 0.2 -> DRIFT DETECTED.**
+
+| | no_drift batch | drift batch |
+|---|---|---|
+| Features drifted | 0 of 11 | **4 of 11 (36%)**: interest rate (0.897), loan / income (0.250), income (0.173), loan purpose (0.113) |
+| Prediction PSI | 0.007 | 0.198 |
+| Mean predicted probability (training 22.1%) | 22.0% | **30.8%** |
+| Share in the REJECT band (training 18.4%) | 17.9% | **26.4%** |
+| **Status** | **NO DRIFT** | **DRIFT DETECTED** |
+
+Only the four changed features drift; every other feature stays below 0.05. The prediction PSI (0.198) is just
+under its own 0.2 line, so here the alarm comes from the feature drift. Details: `reports/drift_summary.md`,
+interactive HTML reports in `reports/drift/`, walkthrough in `notebooks/03_drift_demo.ipynb` (charts 26-28).
+Evidently is told not to send usage data (`DO_NOT_TRACK=1`).
+
+**In the API:**
+- the check runs **every day at 02:00** (APScheduler inside the API) on the applications of the last 30 days;
+  with fewer than 50 stored applications it is skipped with a clear message (`DRIFT_SCHEDULER=0` turns it off);
+- `POST /monitoring/drift/run?batch=live|drift|no_drift` (admin) runs it now (about 2-3 s);
+  `GET /monitoring/drift/latest` (admin) returns the latest result (404 if none yet);
+- every check is stored in the `drift_reports` table and the audit log, and shown on the Dashboard, which also has a
+  **Run a drift check now** button.
+
+**Retraining (`src/retrain.py`):** a candidate model (same tuned settings + calibration) is trained on the old training
+data plus new **labelled** loans and compared with the production model on a hold-out of new loans. Rule: **replace
+only if the candidate's ROC-AUC is not worse**. For the demo the new loans are the same 2,000 intent-resampled test
+loans as the drift batch, but before the feature changes and with their real outcomes (1,000 added to training,
+1,000 hold-out):
+
+| Production model (hold-out ROC-AUC) | Candidate model | Decision |
+|---|---|---|
+| 0.9596 | 0.9609 | **REPLACE** (not carried out in the demo) |
+
+The difference is within normal noise. The demo does **not** replace the model by default: the new loans come from the
+test split, so a model trained on them would make the Step 4 test metrics, the business simulation and the SHAP report
+describe a different model. **The official metrics stay the Step 4 test numbers.**
+
+```bash
+python src/retrain.py              # compare + log the decision (MLflow, reports/retrain_log.csv, retrain_report.md)
+python src/retrain.py --apply      # ... and replace the model if not worse: backup in models/backup/<time>_v1/,
+                                   #     new MLflow version with alias "production" (restart the API afterwards)
+python src/retrain.py --restore models/backup/<folder>   # put the backed-up model back
+```
+
 ## Results so far
 
 | | Validation ROC-AUC |
@@ -375,6 +445,8 @@ The frontend never loads the model or the database - it only calls the API.
 | **Final calibrated model - TEST split** | **0.952** |
 
 NPA reduction on the test split: **79.8%** (REVIEW approved) to **93.1%** (REVIEW rejected) vs approving everyone.
+Drift monitoring: the simulated drift batch is flagged (4 of 11 features drifted, mean predicted risk 22% -> 31%),
+the no-drift batch is not.
 
 No feature passes the 0.90 single-feature leakage alarm and no model passes 0.97 (`reports/leakage_check.md`).
 Key EDA findings: `reports/eda_summary.md`.
