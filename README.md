@@ -78,6 +78,17 @@ src/
 models/
   loan_default_model.joblib   final pipeline (preprocessing + calibrated XGBoost) used by the API
   model_meta.json             version, features, best params, test metrics, decision cut-offs, library versions
+app/                FastAPI backend
+  main.py           app + startup (loads the model and SHAP explainer once) + GET /health
+  config.py, db.py  settings from .env, database connection
+  models.py         tables: users, loan_applications, predictions, audit_log, drift_reports
+  schemas.py        input validation (the 11 fields) and response shapes
+  auth.py           bcrypt passwords + JWT tokens, roles admin / officer
+  services/scoring.py   calls src/explain.py (probability, band, top 5 reasons)
+  routers/          auth, applications, model, monitoring endpoints
+  seed.py           creates the admin + officer users from .env
+alembic/, alembic.ini   database migrations
+scripts/benchmark_api.py  latency test against a running API
 notebooks/
   01_eda.ipynb    exploratory data analysis (charts + insights, executed)
   02_model_and_shap.ipynb   model results (Steps 3-5) + SHAP explanations (executed)
@@ -136,6 +147,7 @@ python src/train.py           # train + compare 4 models (~35 s) -> reports/mode
 python src/tune.py            # Optuna 50 trials + final model (~3 min) -> models/, reports/final_model.md
 python src/business.py        # decision cut-offs + NPA simulation (~10 s) -> reports/business_simulation.md
 python src/explain.py         # SHAP global charts (~6 s) -> reports/shap_insights.md
+uvicorn app.main:app --reload # the API (see "Backend API" below for migrations + users first)
 jupyter nbconvert --to notebook --execute --inplace notebooks/02_model_and_shap.ipynb   # model + SHAP notebook
 pytest -q                     # run the tests
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda.ipynb   # re-run the EDA
@@ -281,6 +293,46 @@ The explainer is built once (about 3 s) and then explains one applicant in about
 
 Loan-to-income works like a switch: SHAP -0.45 on average up to 30% of income, +3.73 for renters above 30%
 (chart 24). Full table and lending meaning: `reports/shap_insights.md`; walkthrough: `notebooks/02_model_and_shap.ipynb`.
+
+## Backend API (FastAPI + PostgreSQL)
+
+**Start it** (Docker Desktop running, from the project folder):
+
+```bash
+source .venv/bin/activate
+docker compose up -d                 # PostgreSQL (once per session)
+alembic upgrade head                 # create / update the tables
+python -m app.seed                   # create the admin + officer users from .env (safe to run again)
+uvicorn app.main:app --reload        # API on http://127.0.0.1:8000 - Swagger docs at /docs
+```
+
+Users and passwords come from `.env` (`ADMIN_*`, `OFFICER_*`). In Swagger, press **Authorize**, log in, then try
+`POST /applications` - the dropdown has a low-risk, a high-risk and a missing-values example (real loans).
+
+| Endpoint | Who | What |
+|---|---|---|
+| `GET /health` | anyone | API, model version, database status |
+| `POST /auth/login` | anyone | username + password (form) -> JWT token |
+| `GET /auth/me` | logged in | username and role |
+| `POST /applications` | logged in | validate the 11 fields, score + explain, save application + prediction + audit row |
+| `GET /applications` | logged in | paginated list (`page`, `page_size`), filter `decision=APPROVE/REVIEW/REJECT` |
+| `GET /applications/{id}` | logged in | one application with its prediction |
+| `GET /model/info` | logged in | model version, test metrics, decision cut-offs |
+| `GET /monitoring/stats` | admin only | request count, average / p95 latency, decision counts, last 7 days |
+
+**Validation (422 if broken):** age 18-100, income > 0, home ownership / loan intent / grade from the known lists,
+past default Y/N, employment length <= age - 14, credit history <= age, `loan_percent_income` within 0.10 of
+loan_amnt / person_income, no unknown fields. `person_emp_length` and `loan_int_rate` may be null (the model fills them in).
+The fields are converted with `to_model_input()` from `src/clean_data.py` - the same code as the rest of the project.
+
+**Latency** (100 real test applicants, PostgreSQL, MacBook Air): model scoring + SHAP median **23 ms**; whole
+request including the database median **32 ms**, p95 **41 ms** - target was under 200 ms.
+Re-run with the API running: `python scripts/benchmark_api.py --n 100` (it saves 100 "Benchmark" applications).
+
+After changing `app/models.py`: `alembic revision --autogenerate -m "what changed"` then `alembic upgrade head`.
+
+Tests: `pytest -q tests/test_api.py` uses a temporary SQLite database built with the same Alembic migration -
+no Docker needed.
 
 ## Results so far
 
