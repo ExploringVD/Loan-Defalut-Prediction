@@ -62,8 +62,7 @@ def page() -> None:
         "Loan amount": a["loan_amnt"],
         "Grade": a["loan_grade"],
         "Probability of default": ui.format_probability(a["prediction"]["probability"]) if a["prediction"] else "-",
-        # a list, because the pill column (MultiselectColumn) shows each list item as a coloured pill
-        "Decision": [ui.decision_label(a["prediction"]["decision"])] if a["prediction"] else [],
+        "Decision": ui.decision_pill(a["prediction"]["decision"] if a["prediction"] else None),
         "Entered by": a["created_by"],
     } for a in items])
     with st.container(key="card_table"):
@@ -74,9 +73,7 @@ def page() -> None:
             key="history_table",
             column_config={
                 "Loan amount": st.column_config.NumberColumn(format="$%d"),
-                "Decision": st.column_config.MultiselectColumn(
-                    options=[ui.decision_label(d) for d in ui.DECISIONS],
-                    color=[v["pill"] for v in ui.DECISIONS.values()]),
+                "Decision": ui.decision_pill_column(),
             })
 
     rows = selection.selection.rows if selection else []

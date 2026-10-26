@@ -5,6 +5,7 @@ by replacing api.make_http_client - so these tests go frontend -> API -> model -
 """
 import httpx
 import numpy as np
+import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -236,6 +237,48 @@ def test_history_page_lists_applications(wired, officer):
     decisions = at.dataframe[0].value["Decision"]                      # pill column: one decision per row
     assert {tuple(v) for v in decisions} == {(ui.decision_label("REJECT"),)}
     assert len(decisions) == min(kpis["Rejected"], 50)
+
+
+@needs_model
+def test_batch_page_scores_the_sample_file(wired):
+    def batch_page():
+        from views import batch
+        batch.page()
+
+    at = AppTest.from_function(batch_page, default_timeout=60)
+    at.session_state["token"] = token_for(wired, "test_officer", "officer-pass")
+    at.run()
+    assert not at.exception
+    assert at.title[0].value == "Batch scoring"
+    assert at.button(key="batch_score").disabled                       # nothing uploaded yet
+    at.button(key="batch_sample").click().run()
+    assert not at.exception, at.exception
+    result = at.session_state["batch_result"]
+    assert result["summary"]["rows_scored"] == 10 and result["file"] == "sample_applicants.csv"
+    kpis = {m.label: m.value for m in at.metric}
+    assert kpis["Rows scored"] == "10" and kpis["Rows rejected"] == "0" and "ROC-AUC" in kpis
+    pills = at.dataframe[0].value["Decision"]                          # coloured decision pills
+    assert {tuple(v) for v in pills} <= {(ui.decision_label(d),) for d in ui.DECISIONS} and len(pills) == 10
+    assert any("10 rows scored" in t.value for t in at.toast)
+
+
+def test_batch_table_hides_columns_the_file_did_not_have():
+    from views.batch import results_table
+    rows = [{"row": 1, "loan_id": 7, "applicant_name": None, "probability": 0.004, "decision": "APPROVE",
+             "top_reason": "Owns home - decreases risk", "loan_status": None}]
+    table = results_table(rows)
+    assert list(table.columns) == ["Row", "Loan ID", "Probability of default", "Decision", "Top reason"]
+    assert table.loc[0, "Probability of default"] == "< 1%" and table.loc[0, "Decision"] == ["✅ APPROVE"]
+
+
+def test_batch_sample_file_has_the_api_columns():
+    sample = pd.read_csv(PROJECT_DIR / "frontend" / "assets" / "sample_applicants.csv")
+    assert len(sample) == 10
+    assert set(api.FORM_FIELDS) - {"applicant_name"} <= set(sample.columns)
+    from views.batch import OPTIONAL, REQUIRED
+    from clean_data import APPLICANT_FIELDS, OPTIONAL_FIELDS
+    assert set(REQUIRED) == set(APPLICANT_FIELDS) - set(OPTIONAL_FIELDS)    # page help text matches the rules
+    assert set(OPTIONAL_FIELDS) <= set(OPTIONAL)
 
 
 @needs_model

@@ -90,6 +90,9 @@ class ApiClient:
             raise ApiError("This page is for admins only.", 403)
         if r.status_code == 404:
             raise ApiError("Not found.", 404)
+        detail = r.json().get("detail") if "json" in r.headers.get("content-type", "") else None
+        if r.status_code in (413, 422) and isinstance(detail, str):    # a plain message, e.g. about an uploaded file
+            raise ApiError(detail, r.status_code)
         if r.status_code == 422:
             fields, general = parse_validation_errors(r.json().get("detail"))
             raise ApiError("Please correct the highlighted fields.", 422, fields, general)
@@ -123,6 +126,10 @@ class ApiClient:
                   "date_from": date_from.isoformat() if date_from else None,
                   "date_to": date_to.isoformat() if date_to else None}
         return self._request("GET", "/applications", params={k: v for k, v in params.items() if v is not None})
+
+    def score_batch(self, filename: str, content: bytes) -> dict:
+        """Upload a CSV -> {"scored": [...], "rejected": [...], "summary": {...}} (nothing is stored)."""
+        return self._request("POST", "/applications/batch", files={"file": (filename, content, "text/csv")})
 
     def get_application(self, application_id: int) -> dict:
         return self._request("GET", f"/applications/{application_id}")

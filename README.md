@@ -28,11 +28,12 @@ Everything is Python 3.12. Built to run on a MacBook Air with 8 GB RAM.
 6. [Run with Docker](#run-with-docker)
 7. [Use the model in your own code](#use-the-model-in-your-own-code)
 8. [API and frontend](#api-and-frontend)
-9. [Drift monitoring and retraining](#drift-monitoring-and-retraining)
-10. [Tests and CI](#tests-and-ci)
-11. [Project structure](#project-structure)
-12. [Limitations](#limitations)
-13. [Credits](#credits)
+9. [Batch scoring (CSV)](#batch-scoring-csv)
+10. [Drift monitoring and retraining](#drift-monitoring-and-retraining)
+11. [Tests and CI](#tests-and-ci)
+12. [Project structure](#project-structure)
+13. [Limitations](#limitations)
+14. [Credits](#credits)
 
 ---
 
@@ -253,6 +254,7 @@ make frontend                 # Streamlit on http://localhost:8501 - log in with
 | `make train` | compare 4 models with CV, log to MLflow (~35 s) |
 | `make tune` | Optuna 50 trials + calibration + final test evaluation (~3 min) - **overwrites the model** |
 | `make test-model` | test ROC-AUC of LR, RF and the saved model, HCL target check, decision bands (~1 min) |
+| `make batch` | score `data/simulated/drift_batch.csv` -> `reports/batch_predictions.csv` (+ `_rejected.csv`) |
 | `make db` | start only PostgreSQL in Docker |
 | `make api` / `make frontend` | run the API / Streamlit locally |
 | `make test` | all tests (SQLite, no Docker) |
@@ -354,6 +356,7 @@ curl -s -X POST localhost:8000/applications -H "Authorization: Bearer $TOKEN" -H
 | `POST /auth/login` | anyone | username + password (form) -> JWT token and role |
 | `GET /auth/me` | logged in | username and role |
 | `POST /applications` | logged in | validate the 11 fields, score + explain, save application + prediction + audit row |
+| `POST /applications/batch` | logged in | upload a CSV (max 5,000 rows) -> scored rows, rejected rows with reasons, summary; nothing stored, one audit row |
 | `GET /applications` | logged in | paginated list; filters `decision`, `date_from`, `date_to` |
 | `GET /applications/{id}` | logged in | one application with its prediction |
 | `GET /model/info` | logged in | model version, test metrics, decision cut-offs |
@@ -371,6 +374,7 @@ bcrypt hashes. The roles are `admin` and `officer`.
 |---|---|---|
 | Login | everyone | split screen: aubergine panel with the project's real numbers, login card on the right |
 | Sidebar | logged in | logo, navigation, user + role badge, live **API online / offline** dot (GET /health), **Log out** |
+| Batch Scoring | logged in | upload a CSV or try the sample file; KPI tiles, decision donut, results with coloured pills, rejected rows with reasons, download buttons |
 | New application | logged in | 11 fields in three cards (Applicant / Loan / Credit history) with the API's limits; loan as % of income is calculated live |
 | Result | logged in | big ✅ APPROVE / ⚠️ REVIEW / ⛔ REJECT badge (colour + icon + words), probability gauge with the three bands ("< 1%" / "> 99%" at the extremes), top 5 reasons as cards and as a chart (crimson ▲ increases risk, green ▼ decreases risk), a toast after scoring |
 | History | logged in | counts per decision, past applications with coloured decision pills, filter by decision and dates, details per row |
@@ -386,6 +390,54 @@ Errors appear as plain messages, never as stack traces. This covers the API bein
 admin-only pages, and 422 errors (shown under the field they belong to).
 
 ---
+
+## Batch scoring (CSV)
+
+Score many applicants at once with the production model. Every row is checked with **the same rules as the API**
+(one Pydantic schema, `src/applicant_schema.py`). The rows are converted with the same `to_model_input()` and get the
+same cut-offs from `model_meta.json`. Invalid rows are not scored; they come back with the reason.
+
+```bash
+python src/predict_batch.py --input data/simulated/drift_batch.csv --output reports/batch_predictions.csv
+# or: make batch
+```
+
+```
+Rows in file: 2,000 | scored: 2,000 | rejected: 0 | time: 2.2 s (model version 1)
+Decision mix (APPROVE < 0.1, REVIEW 0.1-0.35, REJECT >= 0.35):
+  APPROVE     902 (45.1%)
+  REVIEW      571 (28.5%)
+  REJECT      527 (26.4%)
+```
+
+| | |
+|---|---|
+| **Input** | a CSV with the 11 raw fields (same column names as the Kaggle file). `person_emp_length` and `loan_int_rate` may be empty. Optional: `loan_id`, `applicant_name`, `loan_status` |
+| **Output** | `row` (row number in the file), `loan_id` / `applicant_name` if given, `probability`, `decision`, `top_reason` (the strongest SHAP reason in plain English, e.g. "Grade D loan - increases risk") |
+| **Rejected rows** | `<output>_rejected.csv`: row number, ids, `reason` (e.g. "person_age: Input should be greater than or equal to 18") and the values as given |
+| **With `loan_status`** | also prints the ROC-AUC and the real default rate per band |
+| **Speed** | about 2,000 rows in 2 s: one vectorised pass for the probabilities and the SHAP values |
+
+Check: scoring the whole test split this way gives exactly the Step 4 numbers. ROC-AUC is 0.9515, and APPROVE /
+REVIEW / REJECT hold 62.1% / 20.3% / 17.6% of loans with real default rates of 2.9% / 17.1% / 94.0%. So the batch path
+uses the same model, conversion and cut-offs as everything else.
+
+`score_batch()` in `src/predict_batch.py` is the one function behind the script, the API and the web page:
+
+- **API:** `POST /applications/batch` takes an uploaded CSV (multipart field `file`, max 5,000 rows / 5 MB).
+  It returns `{"scored": [...], "rejected": [...], "summary": {...}}`. The rows are **not** stored in the database;
+  the API writes one `audit_log` entry per file (`score_batch`, with the counts).
+  A file problem (unreadable, empty, missing columns) gives a 422 with a clear message, and a file that is too
+  large gives a 413.
+- **Web page:** *Batch Scoring* in the sidebar. Upload a CSV, or press **Score the sample file**:
+  `frontend/assets/sample_applicants.csv` has 10 real test-split loans with names and `loan_status`.
+  The page shows KPI tiles, the decision donut, the real default rate per band (when `loan_status` is given),
+  the results table with coloured decision pills, the rejected rows with reasons, and **Download results CSV**.
+
+```bash
+curl -s -X POST localhost:8000/applications/batch -H "Authorization: Bearer $TOKEN" \
+     -F "file=@frontend/assets/sample_applicants.csv" | python -m json.tool | head -30
+```
 
 ## Drift monitoring and retraining
 
@@ -415,10 +467,10 @@ and `--restore` puts the backup back.
 ## Tests and CI
 
 ```bash
-make test                     # or: pytest -q   -> 121 tests
+make test                     # or: pytest -q   -> 135 tests
 ```
 
-The tests cover cleaning, splits, features, training, tuning, business rules, SHAP, the API (a temporary SQLite
+The tests cover cleaning, splits, features, training, tuning, business rules, SHAP, batch scoring, the API (a temporary SQLite
 database built with the real Alembic migration), drift, and the real Streamlit app run headless against the real API.
 They need neither Docker nor `data/raw`.
 
@@ -440,6 +492,8 @@ src/                      ML code - every script runs from the project folder: p
   train.py                4 models, CV + validation, MLflow
   tune.py                 Optuna + calibration + the one test evaluation -> models/
   test_model.py           test ROC-AUC report (LR, RF, saved XGBoost), HCL target, bands
+  applicant_schema.py     the validation rules (Pydantic ApplicantIn), shared by the API and batch scoring
+  predict_batch.py        batch scoring of a CSV: score_batch() (used by the script, the API and the web page)
   business.py             decision cut-offs + NPA simulation
   decision.py             the APPROVE / REVIEW / REJECT rule
   explain.py              SHAP explainer (built once), explain_one(), reason_text()

@@ -35,20 +35,6 @@ def kpi_tiles(stats: dict, info: dict, days: pd.DataFrame) -> None:
                   delta_color="off", delta_arrow="off", help="On the held-out test split")
 
 
-def decision_donut(mix: dict) -> go.Figure:
-    total = sum(mix.values())
-    mix = {d: n for d, n in mix.items() if n}          # no "0%" slice labels
-    fig = go.Figure(go.Pie(
-        labels=[ui.decision_label(d) for d in mix], values=list(mix.values()), hole=0.62, sort=False,
-        marker=dict(colors=[ui.DECISIONS[d]["color"] for d in mix], line=dict(color=ui.WHITE, width=3)),
-        textinfo="percent", insidetextorientation="horizontal",
-        textfont=dict(color=[ui.DECISIONS[d]["ink"] for d in mix]),
-        hovertemplate="%{label}: %{value:,} applications<extra></extra>",
-    ))
-    fig.add_annotation(text=f"<b>{total:,}</b><br>applications", showarrow=False, font=dict(size=15))
-    return ui.style_figure(fig, "Decision mix (all time)", height=330)
-
-
 def per_day_chart(days: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     for decision in ui.DECISIONS:
@@ -138,7 +124,7 @@ def page() -> None:
     left, right = st.columns([2, 3])
     with left, st.container(key="card_mix"):
         if sum(stats["decisions"].values()):
-            ui.show_chart(decision_donut(stats["decisions"]))
+            ui.show_chart(ui.decision_donut(stats["decisions"], "Decision mix (all time)"))
         else:
             st.info("No applications scored yet.")
     with right, st.container(key="card_per_day"):

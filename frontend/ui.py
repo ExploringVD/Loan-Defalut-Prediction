@@ -204,6 +204,32 @@ def show_result(application: dict) -> None:
                       "(log-odds of the model).")
 
 
+def decision_donut(mix: dict, title: str, unit: str = "applications") -> go.Figure:
+    """Donut of APPROVE / REVIEW / REJECT counts in the decision colours, total in the middle."""
+    total = sum(mix.values())
+    mix = {d: n for d, n in mix.items() if n}          # no "0%" slice labels
+    fig = go.Figure(go.Pie(
+        labels=[decision_label(d) for d in mix], values=list(mix.values()), hole=0.62, sort=False,
+        marker=dict(colors=[DECISIONS[d]["color"] for d in mix], line=dict(color=WHITE, width=3)),
+        textinfo="percent", insidetextorientation="horizontal",
+        textfont=dict(color=[DECISIONS[d]["ink"] for d in mix]),
+        hovertemplate=f"%{{label}}: %{{value:,}} {unit}<extra></extra>",
+    ))
+    fig.add_annotation(text=f"<b>{total:,}</b><br>{unit}", showarrow=False, font=dict(size=15))
+    return style_figure(fig, title, height=330)
+
+
+def decision_pill(decision: str | None) -> list[str]:
+    """Table cell value for decision_pill_column(): a one-item list shown as a coloured pill."""
+    return [decision_label(decision)] if decision else []
+
+
+def decision_pill_column(label: str = "Decision"):
+    """st.dataframe column that shows the decision as a pill in the decision colour (theme green / yellow / red)."""
+    return st.column_config.MultiselectColumn(label, options=[decision_label(d) for d in DECISIONS],
+                                              color=[v["pill"] for v in DECISIONS.values()])
+
+
 def applicant_table(application: dict) -> pd.DataFrame:
     """The 11 inputs of an application as a readable two-column table."""
     a = application

@@ -9,7 +9,7 @@ import streamlit as st
 
 import ui
 from api import API_URL, ApiClient, ApiError
-from views import dashboard, history, new_application
+from views import batch, dashboard, history, new_application
 
 st.set_page_config(page_title="Loan Default Prediction", page_icon="🏦", layout="wide")
 ui.apply_theme()
@@ -100,6 +100,7 @@ else:
     pages = [
         st.Page(guarded(new_application.page), title="New Application", icon=":material/edit_note:", url_path="new",
                 default=True),
+        st.Page(guarded(batch.page), title="Batch Scoring", icon=":material/upload_file:", url_path="batch"),
         st.Page(guarded(history.page), title="History", icon=":material/history:", url_path="history"),
     ]
     if st.session_state["role"] == "admin":

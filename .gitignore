@@ -31,6 +31,9 @@ data/processed/*.csv
 data/raw/
 archive/
 
+# Batch scoring output (python src/predict_batch.py)
+reports/batch_predictions*.csv
+
 # Simulated drift batches (python src/simulate_batches.py) and drift run outputs
 data/simulated/
 reports/drift/

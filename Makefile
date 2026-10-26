@@ -2,7 +2,7 @@
 # The targets call .venv/bin/python directly, so the venv does not need to be activated first.
 PY := .venv/bin/python
 
-.PHONY: help setup clean-data leakage-check train tune test-model db api frontend test drift up down
+.PHONY: help setup clean-data leakage-check train tune test-model batch db api frontend test drift up down
 
 help:            ## list the targets
 	@grep -E '^[a-z-]+:.*## ' Makefile | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -26,6 +26,10 @@ tune:            ## Optuna + calibration + the ONE test evaluation -> models/, r
 
 test-model:      ## test ROC-AUC of LR, RF and the saved XGBoost model, HCL target, decision bands
 	$(PY) src/test_model.py
+
+batch:           ## score data/simulated/drift_batch.csv -> reports/batch_predictions.csv (+ _rejected.csv)
+	@test -f data/simulated/drift_batch.csv || $(PY) src/simulate_batches.py
+	$(PY) src/predict_batch.py --input data/simulated/drift_batch.csv --output reports/batch_predictions.csv
 
 db:              ## start only PostgreSQL in Docker
 	docker compose up -d db

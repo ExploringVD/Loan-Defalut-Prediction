@@ -1,16 +1,22 @@
-"""Score new loan applications and look at past ones."""
+"""Score new loan applications (one by one or a whole CSV) and look at past ones."""
+import io
+import json
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import AuditLog, LoanApplication, Prediction, User
-from app.schemas import EXAMPLES, ApplicantIn, ApplicationOut, ApplicationPage, Decision
+from app.schemas import EXAMPLES, ApplicantIn, ApplicationOut, ApplicationPage, BatchOut, Decision
 from app.services.scoring import score
+from predict_batch import BatchError, read_applicants_csv, score_batch
+
+MAX_BATCH_ROWS = 5_000
+MAX_BATCH_BYTES = 5 * 1024 * 1024     # 5 MB is far more than 5,000 rows need
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -41,6 +47,36 @@ def create_application(
                              "probability": result["probability"]}))
     db.commit()
     return to_out(application)
+
+
+def records(df) -> list[dict]:
+    """DataFrame -> plain JSON records (numpy numbers -> Python numbers, NaN -> None)."""
+    return json.loads(df.to_json(orient="records"))
+
+
+@router.post("/batch", response_model=BatchOut)
+def score_csv(file: UploadFile = File(description="CSV with the 11 applicant fields (max 5,000 rows)"),
+              db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Score a whole CSV file at once (same rules, model and cut-offs as POST /applications). Invalid rows are
+    returned with the reason instead of being scored. The rows are NOT stored - only one audit_log entry."""
+    content = file.file.read(MAX_BATCH_BYTES + 1)
+    if len(content) > MAX_BATCH_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "The file is larger than 5 MB.")
+    try:
+        df = read_applicants_csv(io.BytesIO(content))
+    except BatchError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+    if len(df) > MAX_BATCH_ROWS:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE,
+                            f"The file has {len(df):,} rows - the limit is {MAX_BATCH_ROWS:,} per upload.")
+    result = score_batch(df)
+    summary = result["summary"]
+    db.add(AuditLog(username=user.username, action="score_batch",
+                    details={"file": file.filename, "rows_total": summary["rows_total"],
+                             "rows_scored": summary["rows_scored"], "rows_rejected": summary["rows_rejected"],
+                             "decisions": summary["decisions"], "seconds": summary["seconds"]}))
+    db.commit()
+    return BatchOut(scored=records(result["scored"]), rejected=records(result["rejected"]), summary=summary)
 
 
 @router.get("", response_model=ApplicationPage)
