@@ -34,18 +34,22 @@ def number(label, key, help_text, step, fmt=None, optional=False):
 
 
 def page() -> None:
-    st.title("New loan application")
-    st.caption("Fill in the applicant's details and press **Score application**. For the two optional fields you "
-               "can tick *not known* - the model then fills in a typical value.")
+    ui.page_header("New loan application", "Fill in the applicant's details and press Score application. For the "
+                   "two optional fields you can tick \"not known\" - the model then fills in a typical value.",
+                   eyebrow="Loan desk")
+    toast = st.session_state.pop("toast", None)          # set after a successful score, shown once after the redraw
+    if toast:
+        st.toast(toast, icon=":material/task_alt:")
 
-    st.text_input("Applicant name", value=DEFAULTS["applicant_name"], key="applicant_name", max_chars=100,
-                  help="Used only to find the application later")
-    field_error("applicant_name")
+    with st.container(key="card_name"):
+        st.text_input("Applicant name", value=DEFAULTS["applicant_name"], key="applicant_name", max_chars=100,
+                      help="Used only to find the application later")
+        field_error("applicant_name")
     values = {}
 
     col1, col2, col3 = st.columns(3)
-    with col1, st.container(border=True):
-        st.subheader("Applicant")
+    with col1, st.container(key="card_applicant"):
+        st.subheader(":material/person: Applicant", anchor=False)
         values["person_age"] = number("Age (years)", "person_age", "18 to 100", step=1)
         values["person_income"] = number("Yearly income ($)", "person_income", "Gross yearly income in dollars",
                                          step=1_000.0, fmt="%.0f")
@@ -57,8 +61,8 @@ def page() -> None:
             format_func=ui.HOME_LABELS.get, key="person_home_ownership")
         field_error("person_home_ownership")
 
-    with col2, st.container(border=True):
-        st.subheader("Loan")
+    with col2, st.container(key="card_loan"):
+        st.subheader(":material/payments: Loan", anchor=False)
         values["loan_intent"] = st.selectbox(
             "Purpose", list(ui.INTENT_LABELS), index=list(ui.INTENT_LABELS).index(DEFAULTS["loan_intent"]),
             format_func=ui.INTENT_LABELS.get, key="loan_intent")
@@ -77,8 +81,8 @@ def page() -> None:
             st.markdown(":red[⚠ The loan is larger than the yearly income - the API only accepts up to 100%.]")
         field_error("loan_percent_income")
 
-    with col3, st.container(border=True):
-        st.subheader("Credit history")
+    with col3, st.container(key="card_credit"):
+        st.subheader(":material/fact_check: Credit history", anchor=False)
         values["cb_person_default_on_file"] = st.radio(
             "Past default on file?", ["N", "Y"], format_func={"N": "No", "Y": "Yes"}.get, horizontal=True,
             key="cb_person_default_on_file", help="From the credit bureau: has the applicant defaulted before?")
@@ -87,7 +91,7 @@ def page() -> None:
             "Credit history length (years)", "cb_person_cred_hist_length",
             "Years since the first credit account. Cannot be more than the age.", step=1)
 
-    if st.button("Score application", type="primary"):
+    if st.button("Score application", type="primary", icon=":material/bolt:"):
         body = {"applicant_name": st.session_state["applicant_name"].strip(), **values, "loan_percent_income": ratio}
         st.session_state["form_errors"] = {}
         try:
@@ -98,6 +102,9 @@ def page() -> None:
             st.session_state["form_message"] = (e.message, e.general_errors)
         else:
             st.session_state["form_message"] = None
+            result = st.session_state["last_result"]
+            st.session_state["toast"] = (f"Application #{result['id']} scored: "
+                                         f"{ui.decision_label(result['prediction']['decision'])}")
         st.rerun()   # redraw so the field errors appear next to the fields
 
     message = st.session_state.get("form_message")
@@ -106,5 +113,5 @@ def page() -> None:
         for extra in message[1]:
             st.error(extra)
     if st.session_state.get("last_result"):
-        st.divider()
+        st.subheader("Result", anchor=False)
         ui.show_result(st.session_state["last_result"])

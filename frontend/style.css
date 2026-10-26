@@ -1,0 +1,225 @@
+/* Loan Default Prediction - the one stylesheet of the Streamlit app (loaded by ui.apply_theme()).
+   Colours: ice silver #DDE3E8, deep aubergine #3A0F34, marigold #EAAA00,
+            decisions green #2E8B57 / marigold #EAAA00 / crimson #C0392B.
+   Base colours and the font come from .streamlit/config.toml; this file adds cards, banners and motion.
+   Hooks: st.container(key="card_...") gets the class .st-key-card_... */
+
+:root {
+  --ice: #DDE3E8;
+  --aubergine: #3A0F34;
+  --marigold: #EAAA00;
+  --white: #FFFFFF;
+  --green: #2E8B57;
+  --crimson: #C0392B;
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(58, 15, 52, 0.06), 0 8px 24px -12px rgba(58, 15, 52, 0.22);
+  --shadow-hover: 0 2px 4px rgba(58, 15, 52, 0.08), 0 14px 32px -12px rgba(58, 15, 52, 0.30);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* The font itself is set in config.toml (theme.font) - setting it here would also replace the icon font */
+
+/* ---------- Page frame ---------- */
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stMainBlockContainer"] { padding-top: 2.2rem; padding-bottom: 3rem; }
+h1, h2, h3 { font-weight: 800 !important; letter-spacing: -0.01em; }
+
+/* ---------- Cards (white, rounded, soft shadow) ---------- */
+[class*="st-key-card_"], [class*="st-key-kpi_"], [class*="st-key-drift_card"],
+.st-key-result_card, .st-key-login_card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.3rem;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.25s var(--ease), transform 0.25s var(--ease);
+}
+[class*="st-key-card_"]:hover, .st-key-result_card:hover { box-shadow: var(--shadow-hover); }
+.card-title { font-weight: 700; font-size: 1.02rem; margin-bottom: 0.6rem; color: var(--aubergine); }
+
+/* ---------- Page header banner ---------- */
+.st-key-page_header {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(234, 170, 0, 0.22), transparent 45%),
+    var(--aubergine);
+  border-radius: var(--radius);
+  border-bottom: 3px solid var(--marigold);
+  padding: 1.4rem 1.8rem 1.2rem;
+  margin-bottom: 0.6rem;
+  flex: none;                 /* size to the content (Streamlit's flex: 1 1 0% would squash the padded text) */
+  gap: 1.25rem;               /* Streamlit text elements have margin-bottom -1rem, so this leaves ~0.25rem */
+  box-shadow: var(--shadow);
+  animation: fade-up 0.4s var(--ease) both;
+}
+.st-key-page_header h1 { color: var(--ice) !important; font-size: 2rem; padding: 0.1rem 0 0.15rem; line-height: 1.2; }
+.st-key-page_header [data-testid="stCaptionContainer"],
+.st-key-page_header [data-testid="stCaptionContainer"] p { color: rgba(221, 227, 232, 0.82); font-size: 0.95rem; }
+.eyebrow {
+  color: var(--marigold); font-size: 0.74rem; font-weight: 800;
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+
+/* ---------- Buttons ---------- */
+[data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+  color: var(--aubergine) !important;          /* text on marigold is always aubergine */
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 6px 16px -8px rgba(234, 170, 0, 0.9);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), filter 0.2s;
+}
+[data-testid="stBaseButton-primary"] *, [data-testid="stBaseButton-primaryFormSubmit"] * { color: var(--aubergine) !important; }
+[data-testid="stBaseButton-primary"]:hover, [data-testid="stBaseButton-primaryFormSubmit"]:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow: 0 10px 22px -10px rgba(234, 170, 0, 1);
+}
+[data-testid="stBaseButton-primary"]:focus-visible, [data-testid="stBaseButton-primaryFormSubmit"]:focus-visible,
+[data-testid="stBaseButton-secondary"]:focus-visible {
+  outline: 3px solid var(--marigold); outline-offset: 2px;
+}
+
+/* ---------- Sidebar (aubergine, light text) ---------- */
+[data-testid="stSidebarNavLink"] {
+  border-radius: 10px; margin: 0.1rem 0; transition: background 0.2s var(--ease);
+}
+[data-testid="stSidebarNavLink"]:hover { background: rgba(221, 227, 232, 0.10); }
+[data-testid="stSidebarNavLink"][aria-current="page"] { background: var(--marigold); }
+[data-testid="stSidebarNavLink"][aria-current="page"] * { color: var(--aubergine) !important; font-weight: 700; }
+
+.st-key-sidebar_user {
+  background: rgba(221, 227, 232, 0.07);
+  border: 1px solid rgba(221, 227, 232, 0.14);
+  border-radius: 14px;
+  padding: 0.9rem;
+  gap: 0.7rem;
+}
+.user-row { display: flex; align-items: center; gap: 0.6rem; }
+.avatar {
+  width: 2.1rem; height: 2.1rem; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--marigold); color: var(--aubergine); font-weight: 800;
+}
+.user-name { font-weight: 700; color: var(--ice); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-badge {
+  margin-left: auto; background: rgba(234, 170, 0, 0.16); color: var(--marigold);
+  border: 1px solid rgba(234, 170, 0, 0.55); border-radius: 999px;
+  padding: 0.1rem 0.55rem; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.api-status {
+  display: flex; align-items: center; gap: 0.5rem; margin: 0.7rem 0 0.9rem; font-size: 0.85rem; color: var(--ice);
+}
+.api-status .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex: none; }
+.api-status.online .dot { background: var(--green); animation: pulse 2.4s ease-out infinite; }
+.api-status.degraded .dot { background: var(--marigold); }
+.api-status.offline .dot { background: var(--crimson); }
+[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {
+  background: transparent; color: var(--ice); border: 1px solid rgba(221, 227, 232, 0.35);
+  transition: border-color 0.2s, color 0.2s;
+}
+[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover { border-color: var(--marigold); color: var(--marigold); }
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] { opacity: 0.7; }
+
+/* ---------- Login page ---------- */
+.st-key-login_hero {
+  background:
+    radial-gradient(circle at 0% 100%, rgba(234, 170, 0, 0.20), transparent 50%),
+    radial-gradient(circle at 100% 0%, rgba(221, 227, 232, 0.10), transparent 40%),
+    var(--aubergine);
+  border-radius: 24px;
+  border-bottom: 4px solid var(--marigold);
+  padding: 3rem 2.6rem;
+  min-height: 430px;
+  justify-content: center;
+  box-shadow: var(--shadow-hover);
+  animation: fade-up 0.5s var(--ease) both;
+}
+.hero-mark {
+  width: 3.2rem; height: 3.2rem; border-radius: 14px; margin-bottom: 1.3rem;
+  display: flex; align-items: center; justify-content: center; font-size: 1.7rem;
+  background: var(--marigold);
+}
+.hero-title { color: var(--ice); font-size: 2.5rem; font-weight: 800; line-height: 1.12; letter-spacing: -0.02em; }
+.hero-tagline { color: rgba(221, 227, 232, 0.85); font-size: 1.08rem; margin: 0.9rem 0 1.6rem; max-width: 30rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.chip {
+  background: rgba(234, 170, 0, 0.14); color: var(--marigold);
+  border: 1px solid rgba(234, 170, 0, 0.5); border-radius: 999px;
+  padding: 0.35rem 0.85rem; font-size: 0.85rem; font-weight: 700;
+}
+.st-key-login_card { padding: 2.2rem 2rem; animation: fade-up 0.6s var(--ease) both; }
+
+/* ---------- KPI tiles ---------- */
+[class*="st-key-kpi_"] { border-top: 4px solid var(--aubergine); }
+[class*="st-key-kpi_"]:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+.st-key-kpi_approve { border-top-color: var(--green); }
+.st-key-kpi_review, .st-key-kpi_latency { border-top-color: var(--marigold); }
+.st-key-kpi_reject { border-top-color: var(--crimson); }
+[data-testid="stMetricLabel"] p { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.75; }
+[data-testid="stMetricValue"] { font-weight: 800; }
+
+/* ---------- Result: decision badge, reasons ---------- */
+.st-key-result_card { animation: fade-up 0.45s var(--ease) both; }
+.decision-badge {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  background: var(--band); color: var(--ink);
+  font-size: 1.7rem; font-weight: 800; letter-spacing: 0.05em;
+  padding: 0.5rem 1.2rem; border-radius: 999px;
+  box-shadow: 0 10px 24px -12px var(--band);
+}
+.decision-text { margin-top: 0.6rem; font-weight: 600; }
+.reasons { display: flex; flex-direction: column; gap: 0.5rem; }
+.reason-chip {
+  display: flex; align-items: center; gap: 0.65rem;
+  background: var(--white);
+  border: 1px solid rgba(58, 15, 52, 0.10);
+  border-left: 5px solid var(--chip);
+  border-radius: 12px;
+  padding: 0.55rem 0.8rem;
+  font-weight: 600; font-size: 0.93rem;
+  box-shadow: 0 1px 2px rgba(58, 15, 52, 0.05);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.reason-chip:hover { transform: translateX(3px); box-shadow: var(--shadow); }
+.reason-chip .arrow { color: var(--chip); font-size: 0.95rem; }
+
+/* ---------- Dashboard: model card, drift card ---------- */
+dl.info-list { display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 1rem; margin: 0 0 0.9rem; }
+dl.info-list dt { opacity: 0.7; font-weight: 600; }
+dl.info-list dd { margin: 0; font-weight: 700; }
+.bands { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.band {
+  background: var(--band); color: var(--ink); border-radius: 999px;
+  padding: 0.2rem 0.7rem; font-size: 0.8rem; font-weight: 700;
+}
+[class*="st-key-drift_card"] { border-left: 6px solid var(--ice); }
+.st-key-drift_card_ok { border-left-color: var(--green); }
+.st-key-drift_card_alert { border-left-color: var(--crimson); }
+
+/* ---------- Alerts and tables ---------- */
+[data-testid="stAlertContainer"] { border-radius: 12px; }
+[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
+
+/* ---------- Motion ---------- */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46, 139, 87, 0.65); }
+  70% { box-shadow: 0 0 0 7px rgba(46, 139, 87, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 139, 87, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ---------- Narrow windows (Streamlit stacks the columns below 640 px) ---------- */
+@media (max-width: 640px) {
+  [data-testid="stMainBlockContainer"] { padding-left: 1rem; padding-right: 1rem; }
+  .st-key-page_header { padding: 1.1rem 1.2rem 1rem; }
+  .st-key-page_header h1 { font-size: 1.55rem; }
+  .st-key-login_hero { min-height: 0; padding: 2rem 1.5rem; }
+  .hero-title { font-size: 1.9rem; }
+  .st-key-login_card { padding: 1.5rem 1.2rem; }
+  .decision-badge { font-size: 1.35rem; }
+}

@@ -104,6 +104,13 @@ class ApiClient:
                 raise ApiError("Wrong username or password.", e.status)
             raise
 
+    def health(self) -> str:
+        """'ok', 'degraded' (API up, database not) or 'offline' - for the status dot in the sidebar (public)."""
+        try:
+            return self._request("GET", "/health").get("status", "degraded")
+        except ApiError:
+            return "offline"
+
     def me(self) -> dict:
         return self._request("GET", "/auth/me")
 

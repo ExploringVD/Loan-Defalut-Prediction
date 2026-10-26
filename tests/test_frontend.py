@@ -28,8 +28,11 @@ def test_format_probability(p, text):
 
 def test_every_decision_has_colour_icon_and_words():
     for d in ["APPROVE", "REVIEW", "REJECT"]:
-        assert {"icon", "kind", "color", "text"} <= set(ui.DECISIONS[d])
+        assert {"icon", "color", "ink", "text"} <= set(ui.DECISIONS[d])
         assert d in ui.decision_label(d)
+        assert d in ui.decision_badge(d) and ui.DECISIONS[d]["color"] in ui.decision_badge(d)
+    assert [ui.DECISIONS[d]["color"] for d in ui.DECISIONS] == [ui.GREEN, ui.MARIGOLD, ui.CRIMSON]
+    assert ui.DECISIONS["REVIEW"]["ink"] == ui.AUBERGINE              # text on marigold is aubergine, never white
 
 
 def test_parse_validation_errors_maps_to_fields():
@@ -54,15 +57,35 @@ def test_reasons_figure_colours_and_order():
     assert list(bar.marker.color) == [ui.DECREASES, ui.INCREASES]             # blue decreases, red increases
 
 
-def test_reason_arrows_match_chart_colours():
-    assert ui.reason_arrow(1.5) == ":red[▲]"          # increases risk
-    assert ui.reason_arrow(-0.7) == ":blue[▼]"        # decreases risk
+def test_reason_chips_use_the_chart_colours():
+    up = {"contribution": 1.5, "text": "Grade D loan - increases risk"}
+    down = {"contribution": -0.7, "text": "Yearly income of $80,000 - decreases risk"}
+    assert (ui.reason_arrow(1.5), ui.reason_arrow(-0.7)) == ("▲", "▼")
+    assert (ui.INCREASES, ui.DECREASES) == (ui.CRIMSON, ui.GREEN)
+    assert ui.INCREASES in ui.reason_chip(up) and "▲" in ui.reason_chip(up)
+    assert ui.DECREASES in ui.reason_chip(down) and "▼" in ui.reason_chip(down)
+    assert "$" not in ui.reason_chip(down) and "&#36;80,000" in ui.reason_chip(down)   # never read as maths
+    assert "&lt;b&gt;" in ui.reason_chip({"contribution": 1, "text": "<b>x</b>"})       # text is escaped
 
 
-def test_streamlit_theme_uses_the_chart_colours():
-    config = (PROJECT_DIR / ".streamlit" / "config.toml").read_text()
-    assert f'redColor = "{ui.INCREASES}"' in config
-    assert f'blueColor = "{ui.DECREASES}"' in config
+def test_probability_gauge_bands_come_from_the_cutoffs():
+    fig = ui.probability_gauge(0.0, {"review": 0.10, "reject": 0.35})
+    steps = fig.data[0].gauge.steps
+    assert [tuple(s.range) for s in steps] == [(0, 10), (10, 35), (35, 100)]
+    assert [s.color for s in steps] == [ui.GREEN, ui.MARIGOLD, ui.CRIMSON]
+    assert "< 1%" in fig.layout.annotations[0].text                    # exact 0 is never shown as 0%
+
+
+def test_theme_files_use_the_project_colours():
+    import tomllib
+    theme = tomllib.loads((PROJECT_DIR / ".streamlit" / "config.toml").read_text())["theme"]
+    assert (theme["primaryColor"], theme["backgroundColor"], theme["textColor"]) == (ui.MARIGOLD, ui.ICE, ui.AUBERGINE)
+    assert (theme["redColor"], theme["greenColor"], theme["yellowColor"]) == (ui.CRIMSON, ui.GREEN, ui.MARIGOLD)
+    assert theme["sidebar"]["backgroundColor"] == ui.AUBERGINE
+    css = ui.STYLE_FILE.read_text()
+    for colour in [ui.ICE, ui.AUBERGINE, ui.MARIGOLD, ui.GREEN, ui.CRIMSON]:
+        assert colour in css
+    assert ui.LOGO_FILE.exists() and ui.ICON_FILE.exists()
 
 
 def test_form_limits_match_the_api():
@@ -109,6 +132,16 @@ def test_error_messages(status, message):
         fake_client(status).stats()
 
 
+def test_health_status():
+    assert fake_client(200, {"status": "ok"}).health() == "ok"
+    assert fake_client(200, {"status": "degraded"}).health() == "degraded"
+
+    def refuse(request):
+        raise httpx.ConnectError("connection refused")
+    down = api.ApiClient(http=httpx.Client(transport=httpx.MockTransport(refuse), base_url="http://api"))
+    assert down.health() == "offline"
+
+
 def test_wrong_login_message_and_missing_drift():
     with pytest.raises(api.ApiError, match="Wrong username or password"):
         fake_client(401).login("x", "y")
@@ -142,7 +175,8 @@ def token_for(client, username, password) -> str:
 def test_login_page_and_wrong_password(wired):
     at = AppTest.from_file(APP_FILE, default_timeout=60).run()
     assert not at.exception
-    assert at.title[0].value.endswith("Loan Default Prediction")
+    hero = " ".join(m.value for m in at.markdown)
+    assert "Loan Default Prediction" in hero and "Test ROC-AUC 0.952" in hero     # hero panel with real numbers
     at.text_input(key="login_username").input("test_officer")
     at.text_input(key="login_password").input("wrong")
     at.button[0].click().run()
@@ -162,9 +196,12 @@ def test_officer_scores_an_application(wired):
     assert result["applicant_name"] == "UI test applicant"
     assert result["prediction"]["decision"] in ui.DECISIONS
     assert any("Probability of default" in m.label for m in at.metric)
-    shown = [m.value for m in at.markdown]
-    for r in result["prediction"]["top_reasons"]:           # "Why?" list: arrow in the chart colour + the sentence
-        assert f"{ui.reason_arrow(r['contribution'])} {r['text']}" in shown
+    shown = " ".join(m.value for m in at.markdown)
+    for r in result["prediction"]["top_reasons"]:           # "Why?" cards: arrow + sentence in the chart colour
+        assert ui.reason_chip(r) in shown
+    assert "API online" in shown                            # sidebar status dot (GET /health)
+    assert "<style>" in shown                               # style.css loaded
+    assert any("scored" in t.value for t in at.toast)       # toast after scoring
 
 
 @needs_model
@@ -193,8 +230,12 @@ def test_history_page_lists_applications(wired, officer):
     at.run()
     assert not at.exception
     assert at.dataframe and len(at.dataframe[0].value) >= 1
+    kpis = {m.label: int(m.value.replace(",", "")) for m in at.metric}
+    assert kpis["Total applications"] == kpis["Approved"] + kpis["To review"] + kpis["Rejected"] >= 1
     at.selectbox(key="history_decision").select("REJECT").run()
-    assert set(at.dataframe[0].value["Decision"]) == {ui.decision_label("REJECT")}
+    decisions = at.dataframe[0].value["Decision"]                      # pill column: one decision per row
+    assert {tuple(v) for v in decisions} == {(ui.decision_label("REJECT"),)}
+    assert len(decisions) == min(kpis["Rejected"], 50)
 
 
 @needs_model

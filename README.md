@@ -369,11 +369,18 @@ bcrypt hashes. The roles are `admin` and `officer`.
 
 | Page | Who | What |
 |---|---|---|
-| Login | everyone | username + password; **Log out** in the sidebar |
-| New application | logged in | 11 fields with the API's limits; loan as % of income is calculated live |
-| Result | logged in | ✅ APPROVE / ⚠️ REVIEW / ⛔ REJECT (colour + icon + words), probability ("< 1%" / "> 99%" at the extremes), top 5 reasons as a chart and a list (red ▲ increases risk, blue ▼ decreases risk) |
-| History | logged in | past applications, filter by decision and dates, details per row |
-| Dashboard | admin | model metrics, applications per day, latency, decision mix, latest drift status, "Run a drift check now" |
+| Login | everyone | split screen: aubergine panel with the project's real numbers, login card on the right |
+| Sidebar | logged in | logo, navigation, user + role badge, live **API online / offline** dot (GET /health), **Log out** |
+| New application | logged in | 11 fields in three cards (Applicant / Loan / Credit history) with the API's limits; loan as % of income is calculated live |
+| Result | logged in | big ✅ APPROVE / ⚠️ REVIEW / ⛔ REJECT badge (colour + icon + words), probability gauge with the three bands ("< 1%" / "> 99%" at the extremes), top 5 reasons as cards and as a chart (crimson ▲ increases risk, green ▼ decreases risk), a toast after scoring |
+| History | logged in | counts per decision, past applications with coloured decision pills, filter by decision and dates, details per row |
+| Dashboard | admin | KPI tiles, decision donut, applications per day, latency vs the 200 ms target, model card, drift status card with "Run drift check" |
+
+**Look and feel:** ice silver `#DDE3E8` background, deep aubergine `#3A0F34` sidebar, banners and text, marigold
+`#EAAA00` for buttons and highlights (always with aubergine text). The decision colours are green `#2E8B57`,
+marigold and crimson `#C0392B`. The theme is set in `.streamlit/config.toml`, and all CSS is in one file,
+`frontend/style.css`, loaded by `ui.apply_theme()`. Every Plotly chart uses `ui.style_figure()`. The gauge bands
+come from the API (`model_meta.json`), never from the frontend code.
 
 Errors appear as plain messages, never as stack traces. This covers the API being down, an expired login,
 admin-only pages, and 422 errors (shown under the field they belong to).
@@ -408,7 +415,7 @@ and `--restore` puts the backup back.
 ## Tests and CI
 
 ```bash
-make test                     # or: pytest -q   -> 119 tests
+make test                     # or: pytest -q   -> 121 tests
 ```
 
 The tests cover cleaning, splits, features, training, tuning, business rules, SHAP, the API (a temporary SQLite
@@ -449,7 +456,8 @@ app/                      FastAPI backend
   services/               scoring.py (model + SHAP), drift_service.py
   scheduler.py, seed.py   daily drift job; admin + officer users
 alembic/, alembic.ini     database migrations
-frontend/                 Streamlit app: app.py, api.py (the only way to the backend), ui.py, views/
+frontend/                 Streamlit app: app.py, api.py (the only way to the backend), ui.py (theme + shared
+                          display helpers), style.css (all CSS), assets/ (logo), views/
 tests/                    pytest tests (+ conftest.py: SQLite test database, test users)
 notebooks/                01 EDA, 02 model + SHAP, 03 drift demo
 reports/                  results (.md / .csv), figures/, drift/ (not in git)

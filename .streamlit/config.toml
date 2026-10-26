@@ -5,7 +5,29 @@ toolbarMode = "minimal"      # hide the developer "Deploy" menu
 [browser]
 gatherUsageStats = false
 
+# Colours: ice silver #DDE3E8, deep aubergine #3A0F34, marigold #EAAA00 (+ decision colours, = frontend/ui.py).
+# Cards, banners and animations are in frontend/style.css.
 [theme]
-primaryColor = "#2a78d6"     # same blue as the report charts
-redColor = "#d03b3b"         # = ui.INCREASES (reason increases risk, REJECT)
-blueColor = "#2a78d6"        # = ui.DECREASES (reason decreases risk)
+base = "light"
+primaryColor = "#EAAA00"                 # marigold: primary buttons, sliders, focus rings
+backgroundColor = "#DDE3E8"              # ice silver page
+secondaryBackgroundColor = "#FFFFFF"     # inputs and surfaces
+textColor = "#3A0F34"                    # aubergine text
+linkColor = "#3A0F34"
+borderColor = "rgba(58, 15, 52, 0.22)"   # aubergine, light: input borders stay visible on white cards
+showWidgetBorder = true                  # (the focus ring is the marigold primaryColor)
+dataframeHeaderBackgroundColor = "#DDE3E8"
+baseRadius = "large"
+font = "'Plus Jakarta Sans':https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap, sans-serif"
+greenColor = "#2E8B57"                   # = ui.GREEN: APPROVE, reason decreases risk, NO DRIFT
+yellowColor = "#EAAA00"                  # = ui.MARIGOLD: REVIEW
+yellowTextColor = "#3A0F34"              # text on marigold is always aubergine
+redColor = "#C0392B"                     # = ui.CRIMSON: REJECT, reason increases risk, DRIFT DETECTED
+
+[theme.sidebar]
+backgroundColor = "#3A0F34"              # aubergine sidebar
+secondaryBackgroundColor = "#3A0F34"
+textColor = "#DDE3E8"                    # light text on aubergine
+linkColor = "#EAAA00"
+primaryColor = "#EAAA00"
+borderColor = "#3A0F34"
