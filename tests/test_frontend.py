@@ -54,6 +54,17 @@ def test_reasons_figure_colours_and_order():
     assert list(bar.marker.color) == [ui.DECREASES, ui.INCREASES]             # blue decreases, red increases
 
 
+def test_reason_arrows_match_chart_colours():
+    assert ui.reason_arrow(1.5) == ":red[▲]"          # increases risk
+    assert ui.reason_arrow(-0.7) == ":blue[▼]"        # decreases risk
+
+
+def test_streamlit_theme_uses_the_chart_colours():
+    config = (PROJECT_DIR / ".streamlit" / "config.toml").read_text()
+    assert f'redColor = "{ui.INCREASES}"' in config
+    assert f'blueColor = "{ui.DECREASES}"' in config
+
+
 def test_form_limits_match_the_api():
     """The form must never allow what the API rejects (checked against the API's own schema)."""
     from app.schemas import ApplicantIn
@@ -151,6 +162,9 @@ def test_officer_scores_an_application(wired):
     assert result["applicant_name"] == "UI test applicant"
     assert result["prediction"]["decision"] in ui.DECISIONS
     assert any("Probability of default" in m.label for m in at.metric)
+    shown = [m.value for m in at.markdown]
+    for r in result["prediction"]["top_reasons"]:           # "Why?" list: arrow in the chart colour + the sentence
+        assert f"{ui.reason_arrow(r['contribution'])} {r['text']}" in shown
 
 
 @needs_model

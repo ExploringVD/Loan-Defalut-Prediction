@@ -1,0 +1,6 @@
+# What the Streamlit frontend needs (used by Dockerfile.frontend). It only talks to the API - no model here.
+streamlit==1.64.0
+plotly==5.24.1
+httpx==0.28.1
+pandas==3.0.6
+python-dotenv==1.2.3

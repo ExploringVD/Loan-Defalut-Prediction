@@ -1,0 +1,28 @@
+# What the FastAPI backend needs (used by Dockerfile). Exact versions = the ones the saved model was built with,
+# so models/loan_default_model.joblib loads the same way on every machine.
+
+# Model + SHAP + drift
+pandas==3.0.6
+numpy==2.5.3
+pyarrow==25.0.1          # reads data/processed/credit_clean.parquet
+scikit-learn==1.9.1
+xgboost==3.4.1
+imbalanced-learn==0.14.2
+shap==0.52.0
+evidently==0.7.23
+joblib==1.6.0
+matplotlib==3.11.2       # imported by src/explain.py (charts)
+
+# API
+fastapi==0.142.2
+uvicorn==0.54.0
+pydantic==2.13.5
+python-multipart==0.0.32 # form login in FastAPI (Swagger "Authorize")
+sqlalchemy==2.1.1
+alembic==1.20.0
+psycopg2-binary==2.9.13
+pyjwt==2.15.1
+passlib==1.7.4
+bcrypt==4.0.1            # passlib 1.7.4 breaks with bcrypt >= 4.1
+apscheduler==3.11.3
+python-dotenv==1.2.3

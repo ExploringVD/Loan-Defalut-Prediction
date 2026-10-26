@@ -1,5 +1,10 @@
-# PostgreSQL database for the API (users, applications, predictions, audit log).
+# The whole system in Docker: PostgreSQL + FastAPI backend + Streamlit frontend.
+#   docker compose up -d db        only the database (local development: API and Streamlit run from .venv)
+#   docker compose up --build      all three services -> http://localhost:8501 (app), http://localhost:8000/docs (API)
+#   docker compose down            stop (the database is kept in the "pgdata" volume)
+# Settings come from .env (copy .env.example). Memory limits are sized for an 8 GB laptop.
 services:
+  # PostgreSQL database for the API (users, applications, predictions, audit log, drift reports).
   db:
     image: postgres:16
     container_name: loan_db
@@ -16,6 +21,46 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # FastAPI backend. On start: alembic upgrade head, seed the users, uvicorn (see Dockerfile).
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: loan-default-api
+    container_name: loan_api
+    env_file: .env                     # JWT_SECRET, ADMIN_*, OFFICER_* ...
+    environment:
+      # Inside Docker the database host is the service name "db", not localhost
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-loan_user}:${POSTGRES_PASSWORD:-loan_pass_local}@db:5432/${POSTGRES_DB:-loan_db}
+      DRIFT_SCHEDULER: "1"             # daily drift check at 02:00 (container time = UTC)
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro        # the model on disk is the one served (restart the api after retraining)
+      - ./reports:/app/reports         # drift HTML / JSON reports survive restarts
+    mem_limit: 1g
+    restart: unless-stopped
+
+  # Streamlit frontend. It only needs the API address - no secrets, no database.
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: loan-default-frontend
+    container_name: loan_frontend
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
     mem_limit: 512m
     restart: unless-stopped
 

@@ -1,0 +1,35 @@
+# Not sent to Docker when building the images (the Dockerfiles also COPY only the folders they need)
+
+# Python environment and caches
+.venv
+.venv.nosync
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ipynb_checkpoints
+
+# Secrets - docker compose passes .env as environment variables instead
+.env
+
+# Data and experiment files the images do not need
+data/raw
+data/simulated
+data/processed/*.csv
+archive
+mlruns
+mlflow.db
+models/backup
+reports
+notebooks
+docs
+
+# Project tools and local notes
+.git
+.github
+tests
+scripts
+prompts
+CLAUDE.md
+*.md
+Makefile
+.DS_Store

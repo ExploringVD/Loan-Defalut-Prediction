@@ -44,6 +44,12 @@ def show_decision(decision: str, probability: float) -> None:
     getattr(st, d["kind"])(message, icon=d["icon"])
 
 
+def reason_arrow(contribution: float) -> str:
+    """Red up arrow = increases risk, blue down arrow = decreases risk (same colours as the chart, see
+    .streamlit/config.toml). Streamlit colour markdown, so it also works without HTML."""
+    return ":red[▲]" if contribution > 0 else ":blue[▼]"
+
+
 def reasons_figure(reasons: list[dict]) -> go.Figure:
     """Horizontal bars of the top SHAP reasons; the biggest reason is at the top."""
     ordered = list(reversed(reasons))
@@ -73,8 +79,7 @@ def show_result(application: dict) -> None:
         st.metric("Probability of default", format_probability(p["probability"]))
         st.markdown("**Why?**")
         for r in p["top_reasons"]:
-            arrow = "🔺" if r["contribution"] > 0 else "🔻"
-            st.markdown(f"{arrow} {r['text']}")
+            st.markdown(f"{reason_arrow(r['contribution'])} {r['text']}")
         st.caption(f"Application #{application['id']} for {application['applicant_name']} - model version "
                    f"{p['model_version']} - scored in {p['latency_ms']:.0f} ms")
     with right:

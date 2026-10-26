@@ -1,5 +1,6 @@
-# Python
-.venv/
+# Python (.venv may be a symlink to .venv.nosync, which iCloud does not sync)
+.venv
+.venv.nosync/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/

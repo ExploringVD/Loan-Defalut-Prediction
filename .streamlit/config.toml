@@ -7,3 +7,5 @@ gatherUsageStats = false
 
 [theme]
 primaryColor = "#2a78d6"     # same blue as the report charts
+redColor = "#d03b3b"         # = ui.INCREASES (reason increases risk, REJECT)
+blueColor = "#2a78d6"        # = ui.DECREASES (reason decreases risk)
