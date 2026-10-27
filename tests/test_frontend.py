@@ -262,6 +262,17 @@ def test_batch_page_scores_the_sample_file(wired):
     assert any("10 rows scored" in t.value for t in at.toast)
 
 
+def test_batch_upload_limit_matches_the_api():
+    import tomllib
+
+    from app.routers.applications import MAX_BATCH_BYTES, MAX_BATCH_ROWS
+    config = tomllib.loads((PROJECT_DIR / ".streamlit" / "config.toml").read_text())
+    assert config["server"]["maxUploadSize"] * 1024 * 1024 == MAX_BATCH_BYTES        # MB in Streamlit
+    css = ui.STYLE_FILE.read_text()
+    assert f'content: "CSV only - up to {MAX_BATCH_ROWS:,} rows"' in css             # our hint, not "200MB"
+    assert '[data-testid="stBaseButton-primary"]:disabled' in css                    # disabled primary stays marigold
+
+
 def test_batch_table_hides_columns_the_file_did_not_have():
     from views.batch import results_table
     rows = [{"row": 1, "loan_id": 7, "applicant_name": None, "probability": 0.004, "decision": "APPROVE",

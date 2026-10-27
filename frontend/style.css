@@ -73,6 +73,18 @@ h1, h2, h3 { font-weight: 800 !important; letter-spacing: -0.01em; }
   filter: brightness(1.04);
   box-shadow: 0 10px 22px -10px rgba(234, 170, 0, 1);
 }
+/* Disabled primary buttons stay marigold (lighter), so the main action never looks like a white button */
+[data-testid="stBaseButton-primary"]:disabled, [data-testid="stBaseButton-primaryFormSubmit"]:disabled {
+  background: rgba(234, 170, 0, 0.45) !important;
+  border: none !important;
+  box-shadow: none;
+  transform: none;
+  filter: none;
+  cursor: not-allowed;
+}
+[data-testid="stBaseButton-primary"]:disabled *, [data-testid="stBaseButton-primaryFormSubmit"]:disabled * {
+  color: rgba(58, 15, 52, 0.7) !important;
+}
 [data-testid="stBaseButton-primary"]:focus-visible, [data-testid="stBaseButton-primaryFormSubmit"]:focus-visible,
 [data-testid="stBaseButton-secondary"]:focus-visible {
   outline: 3px solid var(--marigold); outline-offset: 2px;
@@ -194,6 +206,14 @@ dl.info-list dd { margin: 0; font-weight: 700; }
 [class*="st-key-drift_card"] { border-left: 6px solid var(--ice); }
 .st-key-drift_card_ok { border-left-color: var(--green); }
 .st-key-drift_card_alert { border-left-color: var(--crimson); }
+
+/* ---------- Batch Scoring: the real limit instead of Streamlit's "5MB per file • CSV" ---------- */
+.st-key-batch_file [data-testid="stFileUploaderDropzoneInstructions"] span { display: none; }
+.st-key-batch_file [data-testid="stFileUploaderDropzoneInstructions"] div::after {
+  content: "CSV only - up to 5,000 rows";    /* = MAX_BATCH_ROWS in app/routers/applications.py */
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
 
 /* ---------- Alerts and tables ---------- */
 [data-testid="stAlertContainer"] { border-radius: 12px; }

@@ -5,6 +5,9 @@ toolbarMode = "minimal"      # hide the developer "Deploy" menu
 [browser]
 gatherUsageStats = false
 
+[server]
+maxUploadSize = 5            # MB - the API's batch limit (5,000 rows / 5 MB, app/routers/applications.py)
+
 # Colours: ice silver #DDE3E8, deep aubergine #3A0F34, marigold #EAAA00 (+ decision colours, = frontend/ui.py).
 # Cards, banners and animations are in frontend/style.css.
 [theme]
